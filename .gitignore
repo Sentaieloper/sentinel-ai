@@ -1,0 +1,15 @@
+node_modules/
+.svelte-kit/
+build/
+.env
+.env.*
+!.env.example
+target/
+.anchor/
+test-ledger/
+__pycache__/
+*.pyc
+.venv/
+model/*.pkl
+model/*.joblib
+.DS_Store

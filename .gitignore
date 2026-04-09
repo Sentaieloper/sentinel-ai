@@ -13,3 +13,5 @@ __pycache__/
 model/*.pkl
 model/*.joblib
 .DS_Store
+WORKLOG.md
+REVIEWS.md

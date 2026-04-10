@@ -18,10 +18,10 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 MONITOR_INTERVAL_SECONDS = int(os.getenv("MONITOR_INTERVAL_SECONDS", "30"))
 
 RISK_THRESHOLDS = {
-    "Safe": 8000,       # health factor > 0.8
-    "Warning": 5000,    # health factor > 0.5
-    "Danger": 3000,     # health factor > 0.3
-    "Critical": 0,      # below 0.3
+    "Safe": 15000,      # health factor >= 1.5
+    "Warning": 12000,   # health factor >= 1.2
+    "Danger": 10500,    # health factor >= 1.05
+    "Critical": 0,      # below 1.05
 }
 
 ALERT_COOLDOWN_SECONDS = 600  # Don't re-alert for same position within 10 min

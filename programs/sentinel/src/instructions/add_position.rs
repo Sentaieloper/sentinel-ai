@@ -35,6 +35,7 @@ pub fn handler(ctx: Context<AddPosition>, protocol: SupportedProtocol) -> Result
     require!(sub.positions_monitored < max, SentinelError::PositionLimitReached);
 
     let clock = Clock::get()?;
+    require!(sub.expires_at >= clock.unix_timestamp, SentinelError::SubscriptionExpired);
     let pos = &mut ctx.accounts.position;
     pos.user = ctx.accounts.user.key();
     pos.protocol = protocol;
@@ -49,6 +50,8 @@ pub fn handler(ctx: Context<AddPosition>, protocol: SupportedProtocol) -> Result
     pos.alert_sent = false;
     pos.bump = ctx.bumps.position;
 
-    ctx.accounts.subscription.positions_monitored += 1;
+    ctx.accounts.subscription.positions_monitored = ctx.accounts.subscription.positions_monitored
+        .checked_add(1)
+        .ok_or(SentinelError::MathOverflow)?;
     Ok(())
 }

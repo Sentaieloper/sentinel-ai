@@ -11,7 +11,11 @@ pub struct UpdatePosition<'info> {
         constraint = config.authority == crank.key() @ SentinelError::Unauthorized,
     )]
     pub config: Account<'info, SentinelConfig>,
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [POSITION_SEED, position.user.as_ref(), position.position_address.as_ref()],
+        bump = position.bump,
+    )]
     pub position: Account<'info, MonitoredPosition>,
     pub crank: Signer<'info>,
 }

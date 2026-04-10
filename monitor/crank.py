@@ -172,23 +172,26 @@ def parse_position_account(data: bytes) -> dict | None:
 
 
 def build_update_position_ix(
+    configPubkey: Pubkey,
     positionPubkey: Pubkey,
     crankPubkey: Pubkey,
     healthFactor: int,
     collateralValue: int,
     debtValue: int,
-    riskLevelIndex: int,
 ) -> Instruction:
-    """Build the update_position instruction."""
+    """Build the update_position instruction.
+    Contract handler: update_position(health_factor: u16, collateral_value: u64, debt_value: u64)
+    Risk level is computed on-chain from thresholds — no need to pass it.
+    """
     discriminator = hashlib.sha256(b"global:update_position").digest()[:8]
 
     ixData = bytearray(discriminator)
     ixData += struct.pack("<H", healthFactor)
     ixData += struct.pack("<Q", collateralValue)
     ixData += struct.pack("<Q", debtValue)
-    ixData += struct.pack("B", riskLevelIndex)
 
     accounts = [
+        AccountMeta(pubkey=configPubkey, is_signer=False, is_writable=False),
         AccountMeta(pubkey=positionPubkey, is_signer=False, is_writable=True),
         AccountMeta(pubkey=crankPubkey, is_signer=True, is_writable=False),
     ]
@@ -213,7 +216,7 @@ def simulate_health_check(position: dict) -> dict:
 
     # Simulate small random fluctuation
     delta = random.randint(-500, 300)
-    newHealth = max(0, min(10000, currentHealth + delta))
+    newHealth = max(0, min(30000, currentHealth + delta))
 
     return {
         "healthFactor": newHealth,

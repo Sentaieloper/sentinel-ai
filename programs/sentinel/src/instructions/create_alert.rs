@@ -20,8 +20,13 @@ pub struct CreateAlert<'info> {
         bump,
     )]
     pub alert: Account<'info, AlertLog>,
-    /// CHECK: User who owns the position
+    /// CHECK: User who owns the position, validated via position.user constraint
+    #[account(constraint = position.user == user.key() @ SentinelError::Unauthorized)]
     pub user: UncheckedAccount<'info>,
+    #[account(
+        seeds = [POSITION_SEED, position.user.as_ref(), position.position_address.as_ref()],
+        bump = position.bump,
+    )]
     pub position: Account<'info, MonitoredPosition>,
     #[account(mut)]
     pub crank: Signer<'info>,

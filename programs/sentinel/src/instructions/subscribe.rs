@@ -29,7 +29,9 @@ pub fn handler(ctx: Context<Subscribe>, tier: SubscriptionTier) -> Result<()> {
     sub.user = ctx.accounts.user.key();
     sub.tier = tier;
     sub.started_at = clock.unix_timestamp;
-    sub.expires_at = clock.unix_timestamp + 30 * 86_400; // 30 days
+    sub.expires_at = clock.unix_timestamp
+        .checked_add(30_i64.checked_mul(86_400).ok_or(crate::errors::SentinelError::MathOverflow)?)
+        .ok_or(crate::errors::SentinelError::MathOverflow)?;
     sub.positions_monitored = 0;
     sub.alerts_enabled = true;
     sub.auto_protect_enabled = tier == SubscriptionTier::Pro;

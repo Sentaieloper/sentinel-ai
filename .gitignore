@@ -16,3 +16,4 @@ model/*.joblib
 WORKLOG.md
 REVIEWS.md
 REFERENCES.md
+deploy-keypair.json

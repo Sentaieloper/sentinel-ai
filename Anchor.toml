@@ -9,7 +9,7 @@ sentinel = "5QiE51bSE3yqJFmRhj1CHt2NwaJpC2iodsaLDrZJDheE"
 
 [provider]
 cluster = "devnet"
-wallet = "~/.config/solana/id.json"
+wallet = "./deploy-keypair.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"

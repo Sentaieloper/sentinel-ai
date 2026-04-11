@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+
 	type RiskLevel = 'Safe' | 'Warning' | 'Danger' | 'Critical';
 
 	interface Position {
@@ -21,18 +23,67 @@
 		severity: RiskLevel;
 	}
 
-	const demoPositions: Position[] = [
+	interface Stats {
+		totalCollateral: number;
+		totalDebt: number;
+		avgHealthFactor: number;
+		atRiskCount: number;
+	}
+
+	const fallbackPositions: Position[] = [
 		{ id: '1', protocol: 'Kamino', asset: 'SOL/USDC', healthFactor: 2.41, collateral: 12500, debt: 5180, riskLevel: 'Safe', lastChecked: '2m ago' },
 		{ id: '2', protocol: 'Drift', asset: 'ETH-PERP', healthFactor: 1.35, collateral: 8200, debt: 6074, riskLevel: 'Warning', lastChecked: '45s ago' },
 		{ id: '3', protocol: 'Marinade', asset: 'mSOL', healthFactor: 4.10, collateral: 25000, debt: 6097, riskLevel: 'Safe', lastChecked: '1m ago' },
 		{ id: '4', protocol: 'Kamino', asset: 'JitoSOL/SOL', healthFactor: 1.08, collateral: 3400, debt: 3148, riskLevel: 'Critical', lastChecked: '10s ago' },
 	];
 
-	const recentAlerts: AlertItem[] = [
+	const fallbackAlerts: AlertItem[] = [
 		{ id: 'a1', type: 'CRITICAL', protocol: 'Kamino', message: 'JitoSOL/SOL health factor below 1.10 — liquidation imminent', timestamp: '10s ago', severity: 'Critical' },
 		{ id: 'a2', type: 'WARNING', protocol: 'Drift', message: 'ETH-PERP position approaching warning zone (HF: 1.35)', timestamp: '2m ago', severity: 'Warning' },
 		{ id: 'a3', type: 'PROTECTED', protocol: 'Kamino', message: 'Auto-protect triggered: added 200 USDC collateral', timestamp: '15m ago', severity: 'Safe' },
 	];
+
+	let positions: Position[] = fallbackPositions;
+	let recentAlerts: AlertItem[] = fallbackAlerts;
+	let dataSource: 'LIVE' | 'DEMO' = 'DEMO';
+
+	let totalCollateral = 0;
+	let totalDebt = 0;
+	let avgHealth = 0;
+	let criticalCount = 0;
+
+	function computeStats(posData: Position[]) {
+		totalCollateral = posData.reduce((s, p) => s + p.collateral, 0);
+		totalDebt = posData.reduce((s, p) => s + p.debt, 0);
+		avgHealth = posData.reduce((s, p) => s + p.healthFactor, 0) / posData.length;
+		criticalCount = posData.filter(p => p.riskLevel === 'Critical' || p.riskLevel === 'Danger').length;
+	}
+
+	computeStats(positions);
+
+	onMount(async () => {
+		try {
+			const [statsRes, posRes, alertsRes] = await Promise.all([
+				fetch('/api/stats'),
+				fetch('/api/positions'),
+				fetch('/api/alerts'),
+			]);
+
+			if (statsRes.ok && posRes.ok && alertsRes.ok) {
+				const statsData: Stats = await statsRes.json();
+				positions = await posRes.json();
+				recentAlerts = (await alertsRes.json()).slice(0, 3);
+				dataSource = 'LIVE';
+
+				totalCollateral = statsData.totalCollateral;
+				totalDebt = statsData.totalDebt;
+				avgHealth = statsData.avgHealthFactor;
+				criticalCount = statsData.atRiskCount;
+			}
+		} catch {
+			// API unavailable — keep fallback data
+		}
+	});
 
 	function riskClass(level: RiskLevel): string {
 		return `badge-${level.toLowerCase()}`;
@@ -48,11 +99,6 @@
 	function gaugeWidth(hf: number): number {
 		return Math.min(Math.max((hf / 4) * 100, 5), 100);
 	}
-
-	const totalCollateral = demoPositions.reduce((s, p) => s + p.collateral, 0);
-	const totalDebt = demoPositions.reduce((s, p) => s + p.debt, 0);
-	const avgHealth = demoPositions.reduce((s, p) => s + p.healthFactor, 0) / demoPositions.length;
-	const criticalCount = demoPositions.filter(p => p.riskLevel === 'Critical' || p.riskLevel === 'Danger').length;
 </script>
 
 <div class="dashboard">
@@ -79,10 +125,13 @@
 	<!-- Positions Grid -->
 	<div class="section-header">
 		<h2>MONITORED POSITIONS</h2>
-		<span class="count">{demoPositions.length} active</span>
+		<div class="section-meta">
+			<span class="data-badge" class:live={dataSource === 'LIVE'}>{dataSource}</span>
+			<span class="count">{positions.length} active</span>
+		</div>
 	</div>
 	<div class="positions-grid">
-		{#each demoPositions as pos}
+		{#each positions as pos}
 			<div class="position-card panel">
 				<div class="pos-header">
 					<div>
@@ -182,9 +231,30 @@
 		letter-spacing: 1.5px;
 	}
 
+	.section-meta {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+	}
+
 	.count {
 		font-size: 11px;
 		color: var(--text-dim);
+	}
+
+	.data-badge {
+		font-size: 9px;
+		font-weight: 700;
+		letter-spacing: 1px;
+		padding: 2px 6px;
+		border-radius: 2px;
+		background: rgba(255, 170, 0, 0.15);
+		color: var(--warning);
+	}
+
+	.data-badge.live {
+		background: rgba(61, 220, 132, 0.15);
+		color: var(--safe);
 	}
 
 	.view-all {

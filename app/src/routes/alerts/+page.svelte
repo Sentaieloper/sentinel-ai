@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+
 	type Severity = 'Safe' | 'Warning' | 'Danger' | 'Critical';
 
 	interface Alert {
@@ -12,7 +14,7 @@
 		severity: Severity;
 	}
 
-	const alerts: Alert[] = [
+	const fallbackAlerts: Alert[] = [
 		{ id: 'a1', type: 'LIQUIDATION_IMMINENT', protocol: 'Kamino', position: 'JitoSOL/SOL', message: 'Health factor dropped below 1.10 — liquidation within ~15 minutes at current rate', healthFactor: 1.08, timestamp: '10 seconds ago', severity: 'Critical' },
 		{ id: 'a2', type: 'HEALTH_DECLINING', protocol: 'Drift', position: 'ETH-PERP', message: 'Position approaching warning zone — health factor 1.35 and declining', healthFactor: 1.35, timestamp: '2 minutes ago', severity: 'Warning' },
 		{ id: 'a3', type: 'AUTO_PROTECT', protocol: 'Kamino', position: 'JitoSOL/SOL', message: 'Auto-protect triggered: added 200 USDC collateral to prevent liquidation', healthFactor: 1.08, timestamp: '15 minutes ago', severity: 'Safe' },
@@ -21,6 +23,32 @@
 		{ id: 'a6', type: 'HEALTH_DECLINING', protocol: 'Kamino', position: 'SOL/USDC', message: 'Gradual health factor decline detected — dropped from 2.80 to 2.41 in 6 hours', healthFactor: 2.41, timestamp: '6 hours ago', severity: 'Warning' },
 	];
 
+	let allAlerts: Alert[] = fallbackAlerts;
+	let dataSource: 'LIVE' | 'DEMO' = 'DEMO';
+	let activeFilter: string = 'All';
+
+	const filterOptions = ['All', 'Critical', 'Warning', 'Safe'];
+
+	$: filteredAlerts = activeFilter === 'All'
+		? allAlerts
+		: allAlerts.filter(a => a.severity === activeFilter);
+
+	onMount(async () => {
+		try {
+			const res = await fetch('/api/alerts');
+			if (res.ok) {
+				allAlerts = await res.json();
+				dataSource = 'LIVE';
+			}
+		} catch {
+			// API unavailable — keep fallback data
+		}
+	});
+
+	function setFilter(filter: string) {
+		activeFilter = filter;
+	}
+
 	function severityClass(s: Severity): string {
 		return `badge-${s.toLowerCase()}`;
 	}
@@ -28,17 +56,25 @@
 
 <div class="alerts-page">
 	<div class="page-header">
-		<h1>ALERT FEED</h1>
+		<div class="header-left">
+			<h1>ALERT FEED</h1>
+			<span class="data-badge" class:live={dataSource === 'LIVE'}>{dataSource}</span>
+		</div>
 		<div class="filter-row">
-			<button class="filter-btn active">All</button>
-			<button class="filter-btn">Critical</button>
-			<button class="filter-btn">Warnings</button>
-			<button class="filter-btn">Resolved</button>
+			{#each filterOptions as opt}
+				<button
+					class="filter-btn"
+					class:active={activeFilter === opt}
+					on:click={() => setFilter(opt)}
+				>
+					{opt}
+				</button>
+			{/each}
 		</div>
 	</div>
 
 	<div class="alert-feed">
-		{#each alerts as alert}
+		{#each filteredAlerts as alert}
 			<div class="alert-card panel" class:critical-border={alert.severity === 'Critical'}>
 				<div class="alert-top">
 					<span class="badge {severityClass(alert.severity)}">{alert.type.replace(/_/g, ' ')}</span>
@@ -54,6 +90,10 @@
 					</div>
 					<p class="alert-msg">{alert.message}</p>
 				</div>
+			</div>
+		{:else}
+			<div class="no-alerts panel">
+				<span>No alerts matching filter "{activeFilter}"</span>
 			</div>
 		{/each}
 	</div>
@@ -72,10 +112,31 @@
 		align-items: center;
 	}
 
+	.header-left {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+
 	.page-header h1 {
 		font-size: 14px;
 		font-weight: 700;
 		letter-spacing: 2px;
+	}
+
+	.data-badge {
+		font-size: 9px;
+		font-weight: 700;
+		letter-spacing: 1px;
+		padding: 2px 6px;
+		border-radius: 2px;
+		background: rgba(255, 170, 0, 0.15);
+		color: var(--warning);
+	}
+
+	.data-badge.live {
+		background: rgba(61, 220, 132, 0.15);
+		color: var(--safe);
 	}
 
 	.filter-row {
@@ -170,5 +231,12 @@
 		font-size: 12px;
 		color: var(--text-secondary);
 		line-height: 1.5;
+	}
+
+	.no-alerts {
+		padding: 24px;
+		text-align: center;
+		font-size: 12px;
+		color: var(--text-dim);
 	}
 </style>

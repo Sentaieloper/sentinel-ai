@@ -1,7 +1,10 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+
 	type RiskLevel = 'Safe' | 'Warning' | 'Danger' | 'Critical';
 
 	interface Position {
+		id: string;
 		protocol: string;
 		asset: string;
 		healthFactor: number;
@@ -13,13 +16,28 @@
 		lastChecked: string;
 	}
 
-	const positions: Position[] = [
-		{ protocol: 'Kamino', asset: 'SOL/USDC', healthFactor: 2.41, liquidationPrice: 68.20, collateral: 12500, debt: 5180, riskLevel: 'Safe', autoProtect: true, lastChecked: '2m ago' },
-		{ protocol: 'Drift', asset: 'ETH-PERP', healthFactor: 1.35, liquidationPrice: 2180.50, collateral: 8200, debt: 6074, riskLevel: 'Warning', autoProtect: false, lastChecked: '45s ago' },
-		{ protocol: 'Marinade', asset: 'mSOL', healthFactor: 4.10, liquidationPrice: 32.10, collateral: 25000, debt: 6097, riskLevel: 'Safe', autoProtect: true, lastChecked: '1m ago' },
-		{ protocol: 'Kamino', asset: 'JitoSOL/SOL', healthFactor: 1.08, liquidationPrice: 142.80, collateral: 3400, debt: 3148, riskLevel: 'Critical', autoProtect: true, lastChecked: '10s ago' },
-		{ protocol: 'Drift', asset: 'SOL-PERP', healthFactor: 1.72, liquidationPrice: 95.40, collateral: 6800, debt: 3953, riskLevel: 'Warning', autoProtect: false, lastChecked: '30s ago' },
+	const fallbackPositions: Position[] = [
+		{ id: 'p1', protocol: 'Kamino', asset: 'SOL/USDC', healthFactor: 2.41, liquidationPrice: 68.20, collateral: 12500, debt: 5180, riskLevel: 'Safe', autoProtect: true, lastChecked: '2m ago' },
+		{ id: 'p2', protocol: 'Drift', asset: 'ETH-PERP', healthFactor: 1.35, liquidationPrice: 2180.50, collateral: 8200, debt: 6074, riskLevel: 'Warning', autoProtect: false, lastChecked: '45s ago' },
+		{ id: 'p3', protocol: 'Marinade', asset: 'mSOL', healthFactor: 4.10, liquidationPrice: 32.10, collateral: 25000, debt: 6097, riskLevel: 'Safe', autoProtect: true, lastChecked: '1m ago' },
+		{ id: 'p4', protocol: 'Kamino', asset: 'JitoSOL/SOL', healthFactor: 1.08, liquidationPrice: 142.80, collateral: 3400, debt: 3148, riskLevel: 'Critical', autoProtect: true, lastChecked: '10s ago' },
+		{ id: 'p5', protocol: 'Drift', asset: 'SOL-PERP', healthFactor: 1.72, liquidationPrice: 95.40, collateral: 6800, debt: 3953, riskLevel: 'Warning', autoProtect: false, lastChecked: '30s ago' },
 	];
+
+	let positions: Position[] = fallbackPositions;
+	let dataSource: 'LIVE' | 'DEMO' = 'DEMO';
+
+	onMount(async () => {
+		try {
+			const res = await fetch('/api/positions');
+			if (res.ok) {
+				positions = await res.json();
+				dataSource = 'LIVE';
+			}
+		} catch {
+			// API unavailable — keep fallback data
+		}
+	});
 
 	function riskClass(level: RiskLevel): string {
 		return `badge-${level.toLowerCase()}`;
@@ -36,7 +54,10 @@
 <div class="positions-page">
 	<div class="page-header">
 		<h1>POSITION MONITOR</h1>
-		<span class="subtitle">{positions.length} positions tracked across {new Set(positions.map(p => p.protocol)).size} protocols</span>
+		<div class="header-meta">
+			<span class="data-badge" class:live={dataSource === 'LIVE'}>{dataSource}</span>
+			<span class="subtitle">{positions.length} positions tracked across {new Set(positions.map(p => p.protocol)).size} protocols</span>
+		</div>
 	</div>
 
 	<div class="table-wrap panel">
@@ -97,11 +118,31 @@
 		color: var(--text-primary);
 	}
 
+	.header-meta {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		margin-top: 4px;
+	}
+
 	.subtitle {
 		font-size: 11px;
 		color: var(--text-dim);
-		display: block;
-		margin-top: 4px;
+	}
+
+	.data-badge {
+		font-size: 9px;
+		font-weight: 700;
+		letter-spacing: 1px;
+		padding: 2px 6px;
+		border-radius: 2px;
+		background: rgba(255, 170, 0, 0.15);
+		color: var(--warning);
+	}
+
+	.data-badge.live {
+		background: rgba(61, 220, 132, 0.15);
+		color: var(--safe);
 	}
 
 	.table-wrap {

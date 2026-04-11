@@ -3,5 +3,13 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
 	plugins: [sveltekit()],
-	server: { port: 5176 }
+	server: {
+		port: 5176,
+		proxy: {
+			'/api': {
+				target: 'http://localhost:8001',
+				changeOrigin: true,
+			}
+		}
+	}
 });

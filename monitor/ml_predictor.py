@@ -1,10 +1,7 @@
 """
-ML Predictor — Sentinel AI
-
-Heuristic-based liquidation time estimator.
-Uses health factor thresholds to predict approximate time
-until liquidation. Replace with XGBoost model when training
-data is available.
+Liquidation time estimator — heuristic-based.
+Uses threshold-based estimation, not ML model.
+XGBoost integration prepared but not yet trained.
 """
 
 

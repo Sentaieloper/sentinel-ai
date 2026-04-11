@@ -97,7 +97,7 @@
 	}
 
 	function gaugeWidth(hf: number): number {
-		return Math.min(Math.max((hf / 4) * 100, 5), 100);
+		return Math.min(Math.max((hf / 5) * 100, 5), 100);
 	}
 </script>
 

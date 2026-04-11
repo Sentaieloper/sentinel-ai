@@ -3,10 +3,16 @@
 Exposes demo DeFi position and alert data for the SvelteKit dashboard.
 """
 
-from fastapi import FastAPI, Query
+import re
+
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 import time
+
+
+def is_valid_solana_address(addr: str) -> bool:
+    return bool(re.match(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$', addr))
 
 app = FastAPI(title="Sentinel AI Monitor", version="0.1.0")
 
@@ -205,12 +211,19 @@ def list_positions():
 
 @app.get("/api/positions/{wallet}")
 def wallet_positions(wallet: str):
+    if not is_valid_solana_address(wallet):
+        raise HTTPException(status_code=400, detail="Invalid Solana wallet address")
     # Demo: return all positions regardless of wallet
     return positions
 
 
 @app.get("/api/alerts")
-def list_alerts(severity: Optional[str] = Query(None)):
+def list_alerts(
+    severity: Optional[str] = Query(None),
+    wallet: Optional[str] = Query(None),
+):
+    if wallet and not is_valid_solana_address(wallet):
+        raise HTTPException(status_code=400, detail="Invalid Solana wallet address")
     if severity:
         filtered = [a for a in alerts if a["severity"].lower() == severity.lower()]
         return filtered

@@ -1,12 +1,29 @@
 <script lang="ts">
 	import '../app.css';
 	import { page } from '$app/stores';
+	import { walletStore, connectPhantom, disconnectPhantom, abbreviateAddress } from '$lib/stores/wallet';
 
 	const navItems = [
 		{ href: '/', label: 'Dashboard' },
 		{ href: '/positions', label: 'Positions' },
 		{ href: '/alerts', label: 'Alerts' }
 	];
+
+	let walletConnected = false;
+	let walletAddress: string | null = null;
+
+	walletStore.subscribe((state) => {
+		walletConnected = state.connected;
+		walletAddress = state.address;
+	});
+
+	async function handleWalletClick() {
+		if (walletConnected) {
+			await disconnectPhantom();
+		} else {
+			await connectPhantom();
+		}
+	}
 </script>
 
 <div class="app-shell">
@@ -27,9 +44,20 @@
 					</a>
 				{/each}
 			</nav>
-			<div class="status-indicator">
-				<span class="pulse"></span>
-				<span class="status-text">MONITORING</span>
+			<div class="topbar-right">
+				<div class="status-indicator">
+					<span class="pulse"></span>
+					<span class="status-text">MONITORING</span>
+				</div>
+				<button class="wallet-btn" on:click={handleWalletClick}>
+					{#if walletConnected && walletAddress}
+						<span class="wallet-dot connected"></span>
+						<span class="wallet-addr">{abbreviateAddress(walletAddress)}</span>
+					{:else}
+						<span class="wallet-dot"></span>
+						<span>CONNECT WALLET</span>
+					{/if}
+				</button>
 			</div>
 		</div>
 	</header>
@@ -108,6 +136,12 @@
 		background: rgba(61, 220, 132, 0.1);
 	}
 
+	.topbar-right {
+		display: flex;
+		align-items: center;
+		gap: 14px;
+	}
+
 	.status-indicator {
 		display: flex;
 		align-items: center;
@@ -127,6 +161,45 @@
 		font-weight: 600;
 		color: var(--accent-green);
 		letter-spacing: 1px;
+	}
+
+	.wallet-btn {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		background: var(--bg-card);
+		border: 1px solid var(--border-bright);
+		color: var(--text-secondary);
+		padding: 6px 14px;
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 10px;
+		font-weight: 600;
+		letter-spacing: 0.5px;
+		text-transform: uppercase;
+		cursor: pointer;
+		border-radius: 2px;
+		transition: all 0.15s;
+	}
+
+	.wallet-btn:hover {
+		border-color: var(--accent-green);
+		color: var(--text-primary);
+	}
+
+	.wallet-dot {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: var(--text-dim);
+	}
+
+	.wallet-dot.connected {
+		background: var(--accent-green);
+		box-shadow: 0 0 4px var(--accent-green);
+	}
+
+	.wallet-addr {
+		color: var(--accent-green);
 	}
 
 	.main-content {

@@ -1,15 +1,23 @@
+# build output
 node_modules/
 .svelte-kit/
 build/
+
+# secrets
 .env
 .env.*
 !.env.example
+
+# solana
 target/
 .anchor/
 test-ledger/
+
+# python + ML
 __pycache__/
 *.pyc
 .venv/
 model/*.pkl
 model/*.joblib
+
 .DS_Store

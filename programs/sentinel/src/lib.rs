@@ -1,13 +1,15 @@
 use anchor_lang::prelude::*;
 
-mod constants;
-mod errors;
-mod instructions;
 mod state;
+mod errors;
+mod constants;
+mod instructions;
 
 use instructions::*;
 
 declare_id!("5QiE51bSE3yqJFmRhj1CHt2NwaJpC2iodsaLDrZJDheE");
+
+/// Subscription and monitoring program for DeFi positions.
 
 #[program]
 pub mod sentinel {

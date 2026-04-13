@@ -1,21 +1,38 @@
+# Sentinel AI — monitor configuration
 import os
+import sys
 import json
 from pathlib import Path
-from dotenv import load_dotenv
 
-load_dotenv()
 
-RPC_URL = os.getenv("ANCHOR_PROVIDER_URL", "https://api.devnet.solana.com")
-PROGRAM_ID = os.getenv("PROGRAM_ID", "")
-KEYPAIR_PATH = os.getenv("CRANK_KEYPAIR_PATH", "./crank-keypair.json")
+def _load():
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass
 
-HELIUS_API_KEY = os.getenv("HELIUS_API_KEY", "")
-BIRDEYE_API_KEY = os.getenv("BIRDEYE_API_KEY", "")
+_load()
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
-MONITOR_INTERVAL_SECONDS = int(os.getenv("MONITOR_INTERVAL_SECONDS", "30"))
+def _require(var, fallback=None):
+    v = os.environ.get(var, fallback)
+    if not v:
+        print(f"[sentinel] warning: {var} not set", file=sys.stderr)
+    return v or ''
+
+
+RPC_URL = os.environ.get("ANCHOR_PROVIDER_URL", "https://api.devnet.solana.com")
+PROGRAM_ID = _require("PROGRAM_ID")
+KEYPAIR_PATH = os.environ.get("CRANK_KEYPAIR_PATH", "./crank-keypair.json")
+
+HELIUS_API_KEY = os.environ.get("HELIUS_API_KEY", "")
+BIRDEYE_API_KEY = os.environ.get("BIRDEYE_API_KEY", "")
+
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+
+MONITOR_INTERVAL_SECONDS = int(os.environ.get("MONITOR_INTERVAL_SECONDS", "30"))
 
 RISK_THRESHOLDS = {
     "Safe": 15000,      # health factor >= 1.5

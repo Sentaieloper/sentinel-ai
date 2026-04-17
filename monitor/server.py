@@ -18,6 +18,7 @@ from typing import Optional, List, Literal, Dict, Any
 import time
 
 DRIFT_READER_URL = os.environ.get("DRIFT_READER_URL", "http://127.0.0.1:8002")
+CHAIN_READER_URL = os.environ.get("CHAIN_READER_URL", "http://127.0.0.1:8003")
 HERMES_URL = os.environ.get("HERMES_URL", "https://hermes.pyth.network")
 
 PYTH_FEEDS = {
@@ -538,6 +539,92 @@ def pyth_snapshot(asset: str):
     if asset not in PYTH_FEEDS:
         raise HTTPException(status_code=400, detail="unsupported asset")
     return {"asset": asset, "price": fetch_pyth_price(asset), "fetchedAt": int(time.time())}
+
+
+def lending_advice(collateral: float, debt: float, hf: float, protocol: str) -> List[dict]:
+    tips: List[dict] = []
+    if debt <= 0:
+        tips.append({
+            "severity": "Safe",
+            "title": "Supply only",
+            "body": f"Supplied ${collateral:.0f} on {protocol}. No debt, position cannot be liquidated.",
+        })
+        return tips
+    if hf < 1.1:
+        tips.append({"severity": "Critical", "title": "Liquidation imminent",
+                     "body": f"Health factor {hf:.2f}. Repay part of your debt or add collateral now."})
+    elif hf < 1.3:
+        tips.append({"severity": "Warning", "title": "Low buffer",
+                     "body": f"HF {hf:.2f} — close to liquidation zone. Keep an eye on collateral-asset price."})
+    elif hf < 2.0:
+        tips.append({"severity": "Warning", "title": "Monitor closely",
+                     "body": f"HF {hf:.2f}. Healthy but watch market moves; a -10% on collateral pushes you toward danger."})
+    else:
+        tips.append({"severity": "Safe", "title": "Healthy borrow",
+                     "body": f"HF {hf:.2f}. Comfortable margin."})
+    if collateral > 0 and debt / max(collateral, 1) > 0.7:
+        tips.append({"severity": "Warning", "title": "High utilization",
+                     "body": "Loan-to-value above 70%. Consider de-risking."})
+    return tips
+
+
+def staking_advice(asset: str, balance: float, sol_equiv: float) -> List[dict]:
+    return [{
+        "severity": "Safe",
+        "title": "Liquid staking position",
+        "body": f"{balance:.4f} {asset} ≈ {sol_equiv:.4f} SOL. Accruing staking yield. Can be unstaked or swapped instantly via Marinade instant-unstake pool.",
+    }]
+
+
+def wallet_advice(asset: str, balance: float) -> List[dict]:
+    if asset == "SOL" and balance < 0.05:
+        return [{"severity": "Warning", "title": "Low SOL",
+                 "body": "Balance below 0.05 SOL. You may not be able to pay transaction fees soon."}]
+    return [{"severity": "Safe", "title": "Wallet balance",
+             "body": f"{balance:.4f} {asset} sitting in the wallet, ready to deploy."}]
+
+
+def enrich_chain_position(p: Dict[str, Any]) -> Dict[str, Any]:
+    src = p.get("source")
+    if src in ("kamino", "marginfi"):
+        p.setdefault("advice", lending_advice(
+            p.get("collateral", 0) or 0,
+            p.get("debt", 0) or 0,
+            p.get("healthFactor", 0) or 0,
+            p.get("protocol", "lending"),
+        ))
+    elif src == "marinade":
+        p.setdefault("advice", staking_advice(
+            p.get("asset", "mSOL"),
+            p.get("balance", 0) or 0,
+            p.get("solEquivalent", 0) or 0,
+        ))
+    elif src in ("native", "spl"):
+        p.setdefault("advice", wallet_advice(p.get("asset", ""), p.get("balance", 0) or 0))
+    return p
+
+
+@app.get("/api/positions/chain/{wallet}")
+def chain_positions(wallet: str):
+    if not is_valid_solana_address(wallet):
+        raise HTTPException(status_code=400, detail="Invalid Solana wallet address")
+
+    url = f"{CHAIN_READER_URL}/all/{wallet}"
+    req = urllib.request.Request(url, headers={"User-Agent": "sentinel-ai/0.1"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            payload = json.loads(resp.read())
+    except urllib.error.URLError as e:
+        raise HTTPException(status_code=503, detail=f"chain_reader unavailable: {e}")
+
+    enriched = []
+    errors = []
+    for block in payload.get("results", []):
+        if block.get("error"):
+            errors.append({"protocol": block.get("protocol"), "error": block["error"]})
+        for pos in block.get("positions", []) or []:
+            enriched.append(enrich_chain_position(pos))
+    return {"wallet": wallet, "positions": enriched, "errors": errors}
 
 
 if __name__ == "__main__":

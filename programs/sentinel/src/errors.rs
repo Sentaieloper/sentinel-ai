@@ -22,4 +22,10 @@ pub enum SentinelError {
     InvalidLeverage,
     #[msg("Invalid or zero price")]
     InvalidPrice,
+    #[msg("Value exceeds sanity bounds")]
+    OutOfBounds,
+    #[msg("Update timestamp goes backward")]
+    StaleUpdate,
+    #[msg("Invalid position address")]
+    InvalidPositionAddress,
 }

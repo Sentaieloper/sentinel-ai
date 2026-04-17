@@ -27,6 +27,13 @@ pub struct AddPosition<'info> {
 }
 
 pub fn handler(ctx: Context<AddPosition>, protocol: SupportedProtocol) -> Result<()> {
+    // Reject default/system pubkeys as monitored positions.
+    let addr = ctx.accounts.position_address.key();
+    require!(
+        addr != Pubkey::default() && addr != anchor_lang::system_program::ID,
+        SentinelError::InvalidPositionAddress
+    );
+
     let sub = &ctx.accounts.subscription;
     let max = match sub.tier {
         SubscriptionTier::Free => FREE_TIER_MAX_POSITIONS,

@@ -337,7 +337,8 @@
         {
           "name": "authority",
           "writable": true,
-          "signer": true
+          "signer": true,
+          "address": "EGFRyf3ZxiyrvP1TvqErFwQkRVsKsbd32VcihCwA2WQ9"
         },
         {
           "name": "system_program",
@@ -506,6 +507,10 @@
               }
             ]
           }
+        },
+        {
+          "name": "treasury",
+          "writable": true
         },
         {
           "name": "user",
@@ -737,6 +742,21 @@
       "code": 6009,
       "name": "InvalidPrice",
       "msg": "Invalid or zero price"
+    },
+    {
+      "code": 6010,
+      "name": "OutOfBounds",
+      "msg": "Value exceeds sanity bounds"
+    },
+    {
+      "code": 6011,
+      "name": "StaleUpdate",
+      "msg": "Update timestamp goes backward"
+    },
+    {
+      "code": 6012,
+      "name": "InvalidPositionAddress",
+      "msg": "Invalid position address"
     }
   ],
   "types": [

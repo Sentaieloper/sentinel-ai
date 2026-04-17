@@ -14,6 +14,8 @@ function loadSdk() {
 
 function riskFromHealth(h) {
 	if (h == null) return 'Safe';
+	// Negative health = insolvent: must be Critical regardless.
+	if (h <= 0) return 'Critical';
 	if (h >= 0.8) return 'Safe';
 	if (h >= 0.5) return 'Warning';
 	if (h >= 0.2) return 'Danger';
@@ -28,11 +30,11 @@ async function read(connection, wallet) {
 	const { MarginfiClient, getConfig } = sdk;
 
 	const config = getConfig('dev');
-	// Read-only wallet wrapper — no signing done in this service
+	// Read-only wallet wrapper — throws loudly if something tries to sign.
 	const readOnlyWallet = {
 		publicKey: wallet,
-		signTransaction: async (tx) => tx,
-		signAllTransactions: async (txs) => txs,
+		signTransaction: async () => { throw new Error('readOnly wallet: signing is disabled'); },
+		signAllTransactions: async () => { throw new Error('readOnly wallet: signing is disabled'); },
 	};
 
 	const client = await MarginfiClient.fetch(config, readOnlyWallet, connection, { readOnly: true });
@@ -62,7 +64,8 @@ async function read(connection, wallet) {
 				: null;
 			const assets = Number(summary?.assets || 0);
 			const liabs = Number(summary?.liabilities || 0);
-			const health = assets > 0 ? (assets - liabs) / assets : 1;
+			// health: 1 = fully collateralised, 0 = at liquidation, <0 = insolvent.
+			const health = assets > 0 ? (assets - liabs) / assets : (liabs > 0 ? -1 : 1);
 
 			const balances = account.balances || [];
 			const depositAssets = [];
@@ -82,13 +85,17 @@ async function read(connection, wallet) {
 				? `${depositAssets.join('/') || 'mixed'} → ${borrowAssets.join('/')}`
 				: depositAssets.join('/') || 'supply only';
 
+			// Map health (-1..1) to HF (0..5) that matches lending UI semantics:
+			// HF 1.0 = liquidation boundary, HF >= 2 = safe.
+			const hfScaled = health <= 0 ? 0 : Math.min(1 + health * 4, 5);
+
 			out.push({
 				id: `marginfi-${addr.toBase58?.() || String(addr)}`,
 				protocol: 'MarginFi',
 				asset: label,
 				collateral: Number(assets.toFixed(2)),
 				debt: Number(liabs.toFixed(2)),
-				healthFactor: Number(((health + 1) * 2).toFixed(2)), // scale 0..1 -> 2..4
+				healthFactor: Number(hfScaled.toFixed(2)),
 				healthPercent: Number((Math.max(health, 0) * 100).toFixed(1)),
 				riskLevel: riskFromHealth(health),
 				source: 'marginfi',

@@ -100,12 +100,10 @@ async function loadUserPositions(walletAddress) {
     const direction = baseAmount > 0 ? 'LONG' : baseAmount < 0 ? 'SHORT' : 'FLAT';
     const notional = Math.abs(baseAmount * oracle);
     const entryPrice = baseAmount !== 0 ? Math.abs(quoteAmount / baseAmount) : 0;
-    const unrealizedPnl =
-      baseAmount > 0
-        ? baseAmount * oracle + quoteAmount
-        : baseAmount < 0
-        ? -baseAmount * (-oracle) - quoteAmount
-        : 0;
+    // PnL for any direction: mark-to-market value + accumulated quote-asset flow.
+    // For longs baseAmount>0 (we own base, we owe quote = negative quoteAmount).
+    // For shorts baseAmount<0 (we owe base, we hold quote = positive quoteAmount).
+    const unrealizedPnl = baseAmount * oracle + quoteAmount;
 
     return {
       id: `drift-${marketIndex}-${idx}`,

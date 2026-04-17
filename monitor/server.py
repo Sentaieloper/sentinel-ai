@@ -47,11 +47,18 @@ def fetch_pyth_price(asset: str) -> float:
     req = urllib.request.Request(url, headers={"User-Agent": "sentinel-ai/0.1"})
     try:
         with urllib.request.urlopen(req, timeout=8) as resp:
-            data = json.loads(resp.read())
-    except urllib.error.URLError as e:
-        raise HTTPException(status_code=502, detail=f"Pyth fetch failed: {e}")
+            body = resp.read()
     except urllib.error.HTTPError as e:
         raise HTTPException(status_code=502, detail=f"Pyth fetch failed: HTTP {e.code}")
+    except urllib.error.URLError:
+        raise HTTPException(status_code=502, detail="Pyth fetch failed: upstream unreachable")
+    except TimeoutError:
+        raise HTTPException(status_code=502, detail="Pyth fetch failed: timeout")
+
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=502, detail="Pyth returned non-JSON response")
 
     if not data:
         raise HTTPException(status_code=502, detail="Pyth returned no price")
@@ -68,13 +75,23 @@ def is_valid_solana_address(addr: str) -> bool:
 
 app = FastAPI(title="Sentinel AI Monitor", version="0.1.0")
 
+# CORS: allow the dev host plus any localhost port; credentials disabled (no auth cookies).
+CORS_ORIGINS = os.environ.get(
+    "CORS_ORIGINS",
+    "http://localhost:5176,http://127.0.0.1:5176",
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[o.strip() for o in CORS_ORIGINS if o.strip()],
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
+
+# Paper-trade storage caps — prevent memory DoS.
+MAX_PAPER_POSITIONS_PER_WALLET = 10
+MAX_PAPER_WALLETS = 500
 
 # ── Demo Data ────────────────────────────────────────────────────────────────
 
@@ -231,13 +248,17 @@ alerts = [
 
 @app.get("/api/health")
 def healthcheck():
-    uptime_seconds = time.time() - BOOT_TIME
-    uptime_pct = min(99.97, 99.0 + (uptime_seconds / 86400) * 0.97)
-    return {"status": "monitoring", "uptime": round(uptime_pct, 2)}
+    uptime_seconds = int(time.time() - BOOT_TIME)
+    return {"status": "monitoring", "uptimeSeconds": uptime_seconds}
 
 
 @app.get("/api/stats")
 def dashboard_stats():
+    """Stats computed over the demo fallback dataset.
+
+    Frontend derives real wallet stats client-side from the aggregated live
+    positions; this endpoint is retained only for the no-wallet preview.
+    """
     totalCollateral = sum(p["collateral"] for p in positions)
     totalDebt = sum(p["debt"] for p in positions)
     avgHealthFactor = round(
@@ -253,19 +274,12 @@ def dashboard_stats():
         "atRiskCount": atRiskCount,
         "positionCount": len(positions),
         "protocolCount": len(set(p["protocol"] for p in positions)),
+        "source": "demo",
     }
 
 
 @app.get("/api/positions")
 def list_positions():
-    return positions
-
-
-@app.get("/api/positions/{wallet}")
-def wallet_positions(wallet: str):
-    if not is_valid_solana_address(wallet):
-        raise HTTPException(status_code=400, detail="Invalid Solana wallet address")
-    # Demo: return all positions regardless of wallet
     return positions
 
 
@@ -373,9 +387,13 @@ def live_positions(wallet: str):
     url = f"{DRIFT_READER_URL}/positions/{wallet}"
     try:
         with urllib.request.urlopen(url, timeout=15) as resp:
-            payload = json.loads(resp.read())
-    except urllib.error.URLError as e:
-        raise HTTPException(status_code=503, detail=f"Drift reader unavailable: {e}")
+            body = resp.read()
+    except (urllib.error.URLError, TimeoutError):
+        raise HTTPException(status_code=503, detail="Drift reader unavailable")
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=502, detail="Drift reader returned malformed response")
 
     positions = payload.get("positions", [])
     for pos in positions:
@@ -498,6 +516,18 @@ def sentinel_evaluate(body: EvaluateRequest):
 def paper_open(body: OpenPaperPosition):
     if not is_valid_solana_address(body.wallet):
         raise HTTPException(status_code=400, detail="Invalid wallet address")
+
+    # Cap total distinct wallets — prevent unbounded memory use from a spam wave.
+    if body.wallet not in _paper_positions and len(_paper_positions) >= MAX_PAPER_WALLETS:
+        raise HTTPException(status_code=429, detail="Paper trading capacity reached")
+
+    existing = _paper_positions.get(body.wallet, [])
+    if len(existing) >= MAX_PAPER_POSITIONS_PER_WALLET:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Max {MAX_PAPER_POSITIONS_PER_WALLET} paper positions per wallet",
+        )
+
     entry = fetch_pyth_price(body.asset)
     pos = {
         "id": f"paper-{uuid.uuid4().hex[:8]}",
@@ -613,9 +643,13 @@ def chain_positions(wallet: str):
     req = urllib.request.Request(url, headers={"User-Agent": "sentinel-ai/0.1"})
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
-            payload = json.loads(resp.read())
-    except urllib.error.URLError as e:
-        raise HTTPException(status_code=503, detail=f"chain_reader unavailable: {e}")
+            body = resp.read()
+    except (urllib.error.URLError, TimeoutError):
+        raise HTTPException(status_code=503, detail="chain reader unavailable")
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=502, detail="chain reader returned malformed response")
 
     enriched = []
     errors = []

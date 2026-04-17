@@ -1,8 +1,12 @@
 const { PublicKey } = require('@solana/web3.js');
 const { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } = require('@solana/spl-token');
 
+// Token mint registry. Uses mainnet mints; the same addresses are also
+// whitelisted on devnet when a matching mint exists. WSOL and the devnet
+// USDC mint `Gh9ZwEmdLJ8D...` are additionally accepted.
 const KNOWN_TOKENS = {
 	EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: { symbol: 'USDC', decimals: 6 },
+	Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr: { symbol: 'USDC-dev', decimals: 6 },
 	So11111111111111111111111111111111111111112: { symbol: 'WSOL', decimals: 9 },
 	mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So: { symbol: 'mSOL', decimals: 9 },
 	J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn: { symbol: 'JitoSOL', decimals: 9 },

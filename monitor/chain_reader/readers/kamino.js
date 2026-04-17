@@ -61,7 +61,15 @@ async function read(connection, wallet) {
 			const borrowUsd = Number(stats.userTotalBorrow || 0);
 			const ltv = Number(stats.loanToValue || 0);
 			const liquidationLtv = Number(stats.liquidationLtv || 0);
-			const hf = liquidationLtv > 0 ? liquidationLtv / Math.max(ltv, 0.0001) : 0;
+			// With no debt the position cannot be liquidated — cap HF display at 5.
+			let hf;
+			if (borrowUsd <= 0 || ltv <= 0) {
+				hf = 5;
+			} else if (liquidationLtv > 0) {
+				hf = Math.min(liquidationLtv / ltv, 5);
+			} else {
+				hf = 0;
+			}
 
 			const depositAssets = deposits.map((d) => d.reserve?.symbol || d.symbol || 'asset').join('/');
 			const borrowAssets = borrows.map((b) => b.reserve?.symbol || b.symbol || 'asset').join('/');
@@ -69,8 +77,12 @@ async function read(connection, wallet) {
 				? `${depositAssets || 'mixed'} → ${borrowAssets || 'loan'}`
 				: `${depositAssets || 'supply only'}`;
 
+			const obligationId = obligation.obligationAddress?.toBase58?.()
+				|| obligation.pubkey?.toBase58?.()
+				|| `idx-${out.length}`;
+
 			out.push({
-				id: `kamino-${obligation.obligationAddress?.toBase58?.() || obligation.pubkey?.toBase58?.() || Math.random()}`,
+				id: `kamino-${obligationId}`,
 				protocol: 'Kamino',
 				asset: label,
 				collateral: Number(depositUsd.toFixed(2)),

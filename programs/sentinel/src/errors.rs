@@ -16,4 +16,10 @@ pub enum SentinelError {
     PositionAlreadyExists,
     #[msg("Math overflow in calculation")]
     MathOverflow,
+    #[msg("Collateral below minimum")]
+    InsufficientCollateral,
+    #[msg("Leverage outside allowed bounds")]
+    InvalidLeverage,
+    #[msg("Invalid or zero price")]
+    InvalidPrice,
 }

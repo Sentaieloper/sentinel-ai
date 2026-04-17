@@ -120,8 +120,6 @@
 	$: tweenedHealth.set(avgHealth);
 	$: tweenedAtRisk.set(criticalCount);
 
-	computeStats(positions);
-
 	async function loadDemo() {
 		try {
 			const [statsRes, posRes, alertsRes] = await Promise.all([
@@ -210,15 +208,27 @@
 		}
 	}
 
+	function pythSymbolFor(asset: string): 'SOL' | 'BTC' | 'ETH' {
+		const u = asset.toUpperCase();
+		if (u.startsWith('BTC')) return 'BTC';
+		if (u.startsWith('ETH')) return 'ETH';
+		return 'SOL';
+	}
+
 	async function closePosition(pos: Position) {
 		if (!currentWallet) return;
 		try {
 			if (pos.source === 'sentinel-paper') {
-				await fetch(`/api/paper/close/${pos.id}?wallet=${currentWallet}`, { method: 'POST' });
+				const res = await fetch(`/api/paper/close/${pos.id}?wallet=${currentWallet}`, { method: 'POST' });
+				if (!res.ok) throw new Error(`paper close: HTTP ${res.status}`);
 			} else if (pos.source === 'sentinel-onchain') {
-				const solPrice = (await (await fetch(`/api/pyth/${pos.asset.split('-')[0]}`)).json()).price;
+				const priceRes = await fetch(`/api/pyth/${pythSymbolFor(pos.asset)}`);
+				if (!priceRes.ok) throw new Error('price fetch failed');
+				const { price: exitPrice } = await priceRes.json();
 				const mod = await import('$lib/onchain/openLeveraged');
-				await mod.closeLeveragedPosition(pos.id, solPrice);
+				await mod.closeLeveragedPosition(pos.id, exitPrice);
+			} else {
+				return; // non-closable (lending, staking, wallet balances)
 			}
 			await loadLivePositions(currentWallet);
 		} catch (e: any) {
@@ -234,22 +244,27 @@
 		await loadDemo();
 	});
 
-	walletStore.subscribe((state) => {
+	// Auto-subscribe via $store; Svelte handles unsubscribe on destroy.
+	$: {
+		const state = $walletStore;
 		if (state.connected && state.address && state.address !== currentWallet) {
 			currentWallet = state.address;
 			loadLivePositions(state.address);
 		}
-		if (!state.connected) {
+		if (!state.connected && currentWallet !== null) {
 			currentWallet = null;
 			livePositions = [];
 			hasDriftAccount = false;
 			liveError = '';
 		}
-	});
+	}
 
 	$: mergedPositions = currentWallet
 		? livePositions
 		: positions;
+
+	// Keep stats in sync with whatever is currently rendered.
+	$: computeStats(mergedPositions);
 
 	function riskClass(level: RiskLevel): string {
 		return `badge-${level.toLowerCase()}`;

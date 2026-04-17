@@ -45,7 +45,10 @@ export async function openLeveragedPosition(params: OpenParams) {
 	const collateralLamports = new BN(Math.round(collateralSol * 1_000_000_000));
 
 	const leverageBps = Math.round(params.leverage * 100);
-	const nonce = BigInt(Date.now());
+	// Nonce combines millisecond timestamp (upper) with 20 bits of randomness
+	// (lower) so two opens within the same ms produce distinct PDAs.
+	const randomLower = BigInt(Math.floor(Math.random() * (1 << 20)));
+	const nonce = (BigInt(Date.now()) << 20n) | randomLower;
 
 	const [positionPda] = leveragedPositionPda(phantom.publicKey, nonce);
 

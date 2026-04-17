@@ -10,13 +10,8 @@
 		{ href: '/alerts', label: 'Alerts' }
 	];
 
-	let walletConnected = false;
-	let walletAddress: string | null = null;
-
-	walletStore.subscribe((state) => {
-		walletConnected = state.connected;
-		walletAddress = state.address;
-	});
+	$: walletConnected = $walletStore.connected;
+	$: walletAddress = $walletStore.address;
 
 	async function handleWalletClick() {
 		if (walletConnected) {

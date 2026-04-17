@@ -100,20 +100,19 @@
 
 	onMount(loadDemo);
 
-	walletStore.subscribe((state) => {
+	$: {
+		const state = $walletStore;
 		if (state.connected && state.address && state.address !== currentWallet) {
 			currentWallet = state.address;
 			loadLive(state.address);
 		}
-		if (!state.connected) {
+		if (!state.connected && currentWallet !== null) {
 			currentWallet = null;
 			livePositions = [];
 		}
-	});
+	}
 
-	$: allPositions = livePositions.length > 0
-		? [...livePositions, ...positions.filter(p => p.protocol !== 'Drift')]
-		: positions;
+	$: allPositions = currentWallet ? livePositions : positions;
 
 	function riskClass(level: RiskLevel): string {
 		return `badge-${level.toLowerCase()}`;

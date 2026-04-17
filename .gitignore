@@ -7,6 +7,9 @@ build/
 .env
 .env.*
 !.env.example
+deploy-keypair.json
+*.keypair.json
+/target/deploy/*-keypair.json
 
 # solana
 target/

@@ -19,20 +19,29 @@
 	let submitting: 'paper' | 'onchain' | null = null;
 	let submitError = '';
 
+	let priceFetchToken = 0;
 	async function refreshPrice() {
+		const token = ++priceFetchToken;
 		priceError = '';
 		try {
 			const res = await fetch(`/api/pyth/${asset}`);
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			const data = await res.json();
+			if (token !== priceFetchToken) return; // stale request
 			livePrice = data.price;
 		} catch (e: any) {
+			if (token !== priceFetchToken) return;
 			priceError = e?.message || 'price fetch failed';
 			livePrice = null;
 		}
 	}
 
-	$: if (open && asset) refreshPrice();
+	// Only refetch when modal opens or the asset actually changes.
+	let lastAsset: Asset | '' = '';
+	$: if (open && asset !== lastAsset) {
+		lastAsset = asset;
+		refreshPrice();
+	}
 
 	$: notional = collateral * leverage;
 	$: liqPrice = livePrice !== null
@@ -42,8 +51,16 @@
 		: null;
 	$: baseSize = livePrice !== null ? notional / livePrice : null;
 
+	function validateInputs(): string | null {
+		if (!wallet) return 'Connect wallet first';
+		if (!collateral || collateral < 10) return 'Collateral must be at least $10';
+		if (!leverage || leverage < 1 || leverage > 20) return 'Leverage must be between 1x and 20x';
+		return null;
+	}
+
 	async function submitPaper() {
-		if (!wallet) { submitError = 'Connect wallet first'; return; }
+		const err = validateInputs();
+		if (err) { submitError = err; return; }
 		submitting = 'paper';
 		submitError = '';
 		try {
@@ -70,7 +87,8 @@
 	}
 
 	async function submitOnChain() {
-		if (!wallet) { submitError = 'Connect wallet first'; return; }
+		const err = validateInputs();
+		if (err) { submitError = err; return; }
 		if (!onChainAvailable) {
 			submitError = 'On-chain not available yet (program deploy in progress)';
 			return;
@@ -100,14 +118,24 @@
 		if (submitting) return;
 		dispatch('close');
 	}
+
+	function handleWindowKey(e: KeyboardEvent) {
+		if (!open) return;
+		if (e.key === 'Escape') {
+			e.preventDefault();
+			closeModal();
+		}
+	}
 </script>
 
+<svelte:window on:keydown={handleWindowKey} />
+
 {#if open}
-	<div class="backdrop" role="button" tabindex="-1" aria-label="close" on:click={closeModal} on:keydown={(e) => e.key === 'Escape' && closeModal()}></div>
-	<div class="modal panel">
+	<div class="backdrop" on:click={closeModal}></div>
+	<div class="modal panel" role="dialog" aria-modal="true" aria-labelledby="open-position-title">
 		<div class="modal-header">
-			<h3>OPEN LEVERAGED POSITION</h3>
-			<button class="close-btn" on:click={closeModal}>&times;</button>
+			<h3 id="open-position-title">OPEN LEVERAGED POSITION</h3>
+			<button class="close-btn" on:click={closeModal} aria-label="close">&times;</button>
 		</div>
 
 		<div class="modal-body">
@@ -172,6 +200,11 @@
 			{#if submitError}
 				<div class="err-banner">{submitError}</div>
 			{/if}
+
+			<div class="devnet-hint">
+				On-chain path signs a Solana <strong>devnet</strong> transaction.
+				Switch Phantom to devnet in Developer Settings before signing.
+			</div>
 		</div>
 
 		<div class="modal-footer">
@@ -335,6 +368,20 @@
 		border-left: 3px solid var(--critical);
 		color: var(--critical);
 		font-size: 11px;
+	}
+
+	.devnet-hint {
+		padding: 6px 10px;
+		background: rgba(61, 220, 132, 0.05);
+		border-left: 2px solid var(--border-bright);
+		color: var(--text-dim);
+		font-size: 10px;
+		line-height: 1.4;
+	}
+
+	.devnet-hint strong {
+		color: var(--accent-green);
+		font-weight: 700;
 	}
 	.modal-footer {
 		display: grid;

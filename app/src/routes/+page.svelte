@@ -41,7 +41,12 @@
 	let blipTimer: any;
 	let clockTimer: any;
 	let caretTimer: any;
+	const bootTimers: any[] = [];
 	const mountedAt = Date.now();
+
+	// Seed synchronously so SSR render shows the radar with blips instead
+	// of flashing empty then populating in onMount.
+	for (let i = 0; i < 7; i++) blips.push(randomBlip());
 
 	const BOOT_SEQUENCE = [
 		'[OK] boot.init             ',
@@ -76,17 +81,21 @@
 		uptime = `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`;
 	}
 
+	function initiateKeyListener(e: KeyboardEvent) {
+		if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+			e.preventDefault();
+			initiate();
+		}
+	}
+
 	onMount(() => {
 		// boot sequence
 		BOOT_SEQUENCE.forEach((line, i) => {
-			setTimeout(() => {
+			const t = setTimeout(() => {
 				bootLines = [...bootLines, line];
 			}, 140 * i);
+			bootTimers.push(t);
 		});
-
-		// seed initial blips
-		for (let i = 0; i < 7; i++) blips.push(randomBlip());
-		blips = blips;
 
 		// radar sweep
 		sweepTimer = setInterval(() => {
@@ -124,6 +133,7 @@
 		clearInterval(blipTimer);
 		clearInterval(clockTimer);
 		clearInterval(caretTimer);
+		bootTimers.forEach(clearTimeout);
 	});
 
 	function initiate() {
@@ -144,6 +154,8 @@
 <svelte:head>
 	<title>Sentinel AI — Tactical Console</title>
 </svelte:head>
+
+<svelte:window on:keydown={initiateKeyListener} />
 
 <div class="tac-root">
 	<!-- Left HUD: boot log -->

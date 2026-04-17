@@ -216,6 +216,33 @@
 			<span>BEAM {sweepAngle.toString().padStart(3, '0')}°</span>
 			<span>TICK {tickCount.toLocaleString()}</span>
 		</div>
+
+		<div class="briefing">
+			<div class="briefing-head">
+				<span class="brief-label">▸ MISSION BRIEFING</span>
+				<span class="brief-code">CLASS-01 · OPEN</span>
+			</div>
+			<div class="briefing-body">
+				<p>
+					<strong>Sentinel AI</strong> is a tactical console that watches your DeFi positions on
+					<strong>Solana devnet</strong> in real time and warns before things get liquidated.
+				</p>
+				<div class="brief-grid">
+					<div>
+						<div class="brief-k">TARGETS</div>
+						<div class="brief-v">Kamino · MarginFi · Marinade · Sentinel Perps · wallet balances</div>
+					</div>
+					<div>
+						<div class="brief-k">SIGNALS</div>
+						<div class="brief-v">Pyth Hermes oracles · on-chain Anchor program · devnet SDKs</div>
+					</div>
+					<div>
+						<div class="brief-k">OUTPUT</div>
+						<div class="brief-v">Live health factor · liquidation price · bot-generated advice</div>
+					</div>
+				</div>
+			</div>
+		</div>
 	</div>
 
 	<!-- Right HUD: systems + threat -->
@@ -551,22 +578,27 @@
 
 	.sweep {
 		position: absolute;
-		top: 50%;
-		left: 50%;
-		width: 50%;
-		height: 50%;
-		transform-origin: 0 0;
-		background: conic-gradient(
-			from 0deg,
-			rgba(61, 220, 132, 0.6) 0deg,
-			rgba(61, 220, 132, 0.2) 18deg,
-			rgba(61, 220, 132, 0.05) 36deg,
-			transparent 60deg
-		);
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
 		border-radius: 50%;
-		clip-path: polygon(0 0, 100% 0, 100% 100%);
+		transform-origin: center;
+		background: conic-gradient(
+			from -90deg,
+			transparent 0deg,
+			transparent 300deg,
+			rgba(61, 220, 132, 0.02) 315deg,
+			rgba(61, 220, 132, 0.08) 330deg,
+			rgba(61, 220, 132, 0.18) 342deg,
+			rgba(61, 220, 132, 0.35) 354deg,
+			rgba(61, 220, 132, 0.55) 360deg
+		);
 		pointer-events: none;
+		mask: radial-gradient(circle at center, transparent 0%, #000 6%, #000 100%);
+		-webkit-mask: radial-gradient(circle at center, transparent 0%, #000 6%, #000 100%);
 	}
+
 
 	.center-pulse {
 		position: absolute;
@@ -635,6 +667,75 @@
 		letter-spacing: 2px;
 		color: var(--text-dim);
 		font-variant-numeric: tabular-nums;
+	}
+
+	.briefing {
+		width: min(720px, 92%);
+		margin-top: 14px;
+		border: 1px solid var(--border-bright);
+		background: rgba(10, 20, 10, 0.55);
+		padding: 12px 16px;
+		font-family: 'IBM Plex Mono', monospace;
+		animation: hud-enter 520ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+		animation-delay: 260ms;
+	}
+
+	.briefing-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		border-bottom: 1px dashed rgba(61, 220, 132, 0.25);
+		padding-bottom: 6px;
+		margin-bottom: 8px;
+	}
+
+	.brief-label {
+		font-size: 9px;
+		font-weight: 700;
+		letter-spacing: 2px;
+		color: var(--accent-green);
+	}
+
+	.brief-code {
+		font-size: 8px;
+		color: var(--text-dim);
+		letter-spacing: 1.5px;
+	}
+
+	.briefing-body p {
+		font-size: 11px;
+		line-height: 1.55;
+		color: var(--text-secondary);
+		margin-bottom: 10px;
+	}
+
+	.briefing-body p strong {
+		color: var(--accent-green);
+		font-weight: 700;
+	}
+
+	.brief-grid {
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: 14px;
+	}
+
+	.brief-k {
+		font-size: 8px;
+		font-weight: 700;
+		letter-spacing: 2px;
+		color: var(--text-dim);
+		margin-bottom: 3px;
+	}
+
+	.brief-v {
+		font-size: 10px;
+		color: var(--text-primary);
+		line-height: 1.45;
+	}
+
+	@media (max-width: 900px) {
+		.brief-grid { grid-template-columns: 1fr; }
 	}
 
 	/* CTA */

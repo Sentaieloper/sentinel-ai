@@ -4,7 +4,8 @@
 	import { walletStore, connectPhantom, disconnectPhantom, abbreviateAddress } from '$lib/stores/wallet';
 
 	const navItems = [
-		{ href: '/', label: 'Dashboard' },
+		{ href: '/', label: 'Tactical' },
+		{ href: '/dashboard', label: 'Dashboard' },
 		{ href: '/positions', label: 'Positions' },
 		{ href: '/alerts', label: 'Alerts' }
 	];
@@ -79,6 +80,30 @@
 		position: sticky;
 		top: 0;
 		z-index: 50;
+		height: 60px;
+		overflow: hidden;
+	}
+
+	.topbar::after {
+		content: '';
+		position: absolute;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		height: 1px;
+		background: linear-gradient(
+			90deg,
+			transparent 0%,
+			var(--accent-green) 50%,
+			transparent 100%
+		);
+		animation: topbar-sweep 5s linear infinite;
+	}
+
+	@keyframes topbar-sweep {
+		0%   { transform: translateX(-100%); opacity: 0; }
+		40%  { opacity: 1; }
+		100% { transform: translateX(100%);  opacity: 0; }
 	}
 
 	.topbar-inner {

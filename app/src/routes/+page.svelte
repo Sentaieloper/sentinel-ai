@@ -1,899 +1,698 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { walletStore } from '$lib/stores/wallet';
-	import OpenPositionModal from '$lib/components/OpenPositionModal.svelte';
 
-	let modalOpen = false;
-	let onChainAvailable = true;
-	// On-chain Anchor program is deployed at 5QiE51bSE3yqJFmRhj1CHt2NwaJpC2iodsaLDrZJDheE on devnet.
+	type Blip = {
+		id: number;
+		angle: number;
+		radius: number;
+		label: string;
+		severity: 'safe' | 'warning' | 'critical';
+		acquired: boolean;
+	};
 
-	type RiskLevel = 'Safe' | 'Warning' | 'Danger' | 'Critical';
-
-	interface AdviceTip {
-		severity: RiskLevel;
-		title: string;
-		body: string;
-	}
-
-	interface Position {
-		id: string;
-		protocol: string;
-		asset: string;
-		healthFactor?: number;
-		healthPercent?: number;
-		leverage?: number;
-		direction?: 'LONG' | 'SHORT' | 'FLAT';
-		entryPrice?: number;
-		oraclePrice?: number;
-		notional?: number;
-		unrealizedPnl?: number;
-		collateral?: number;
-		debt?: number;
-		balance?: number;
-		solEquivalent?: number;
-		exchangeRate?: number;
-		riskLevel: RiskLevel;
-		lastChecked: string;
-		source?: string;
-		advice?: AdviceTip[];
-	}
-
-	interface AlertItem {
-		id: string;
-		type: string;
-		protocol: string;
-		message: string;
-		timestamp: string;
-		severity: RiskLevel;
-	}
-
-	interface Stats {
-		totalCollateral: number;
-		totalDebt: number;
-		avgHealthFactor: number;
-		atRiskCount: number;
-	}
-
-	const fallbackPositions: Position[] = [
-		{ id: '1', protocol: 'Kamino', asset: 'SOL/USDC', healthFactor: 2.41, collateral: 12500, debt: 5180, riskLevel: 'Safe', lastChecked: '2m ago' },
-		{ id: '2', protocol: 'Drift', asset: 'ETH-PERP', healthFactor: 1.35, collateral: 8200, debt: 6074, riskLevel: 'Warning', lastChecked: '45s ago' },
-		{ id: '3', protocol: 'Marinade', asset: 'mSOL', healthFactor: 4.10, collateral: 25000, debt: 6097, riskLevel: 'Safe', lastChecked: '1m ago' },
-		{ id: '4', protocol: 'Kamino', asset: 'JitoSOL/SOL', healthFactor: 1.08, collateral: 3400, debt: 3148, riskLevel: 'Critical', lastChecked: '10s ago' },
+	const PROTOCOLS = [
+		{ label: 'KAMINO',   severity: 'safe' as const },
+		{ label: 'MARGINFI', severity: 'safe' as const },
+		{ label: 'MARINADE', severity: 'safe' as const },
+		{ label: 'PYTH',     severity: 'safe' as const },
+		{ label: 'SOL-PERP', severity: 'warning' as const },
+		{ label: 'BTC-PERP', severity: 'safe' as const },
+		{ label: 'ETH-PERP', severity: 'warning' as const },
+		{ label: 'JITOSOL',  severity: 'safe' as const },
+		{ label: 'USDC',     severity: 'safe' as const },
+		{ label: 'mSOL',     severity: 'safe' as const },
+		{ label: 'HF:1.08',  severity: 'critical' as const },
+		{ label: 'HF:1.35',  severity: 'warning' as const },
 	];
 
-	const fallbackAlerts: AlertItem[] = [
-		{ id: 'a1', type: 'CRITICAL', protocol: 'Kamino', message: 'JitoSOL/SOL health factor below 1.10 — liquidation imminent', timestamp: '10s ago', severity: 'Critical' },
-		{ id: 'a2', type: 'WARNING', protocol: 'Drift', message: 'ETH-PERP position approaching warning zone (HF: 1.35)', timestamp: '2m ago', severity: 'Warning' },
-		{ id: 'a3', type: 'PROTECTED', protocol: 'Kamino', message: 'Auto-protect triggered: added 200 USDC collateral', timestamp: '15m ago', severity: 'Safe' },
+	let blips: Blip[] = [];
+	let sweepAngle = 0;
+	let tickCount = 0;
+	let opsTime = '';
+	let threatLevel: 'NOMINAL' | 'ELEVATED' | 'HIGH' = 'NOMINAL';
+	let uptime = '00:00:00';
+	let blipCounter = 0;
+	let bootLines: string[] = [];
+	let blinkCaret = true;
+
+	let sweepTimer: any;
+	let blipTimer: any;
+	let clockTimer: any;
+	let caretTimer: any;
+	const mountedAt = Date.now();
+
+	const BOOT_SEQUENCE = [
+		'[OK] boot.init             ',
+		'[OK] solana.devnet.rpc     ',
+		'[OK] pyth.hermes.feeds     ',
+		'[OK] kamino.klend.sdk      ',
+		'[OK] marginfi.client.v2    ',
+		'[OK] marinade.token.read   ',
+		'[OK] sentinel.anchor.idl   ',
+		'[OK] xgboost.predictor     ',
+		'[**] sentinel online.      ',
 	];
 
-	interface SupportedProtocol {
-		name: string;
-		kind: string;
-		status: 'TRACKING' | 'OFFLINE' | 'SOON';
-		mark: string;
-		accent: string;
+	function randomBlip(): Blip {
+		const p = PROTOCOLS[Math.floor(Math.random() * PROTOCOLS.length)];
+		return {
+			id: blipCounter++,
+			angle: Math.random() * 360,
+			radius: 40 + Math.random() * 150,
+			label: p.label,
+			severity: p.severity,
+			acquired: false,
+		};
 	}
 
-	const supportedProtocols: SupportedProtocol[] = [
-		{ name: 'Sentinel Perps', kind: 'On-chain leverage · devnet',  status: 'TRACKING', mark: '▲', accent: '#3ddc84' },
-		{ name: 'Kamino',         kind: 'Lending · devnet',            status: 'TRACKING', mark: '▣', accent: '#ff8c42' },
-		{ name: 'MarginFi',       kind: 'Lending · devnet',            status: 'TRACKING', mark: '◇', accent: '#b07bff' },
-		{ name: 'Marinade',       kind: 'Liquid staking · devnet',     status: 'TRACKING', mark: '◆', accent: '#52c4ff' },
-		{ name: 'Wallet',         kind: 'SOL + SPL balances · devnet', status: 'TRACKING', mark: '●', accent: '#3ddc84' },
-		{ name: 'Drift',          kind: 'Perpetuals · paused',         status: 'OFFLINE',  mark: '◈', accent: '#7a9a7a' },
-		{ name: 'Zeta',           kind: 'Perpetuals · shutdown',       status: 'OFFLINE',  mark: '◉', accent: '#7a9a7a' },
-		{ name: 'Jupiter',        kind: 'Perpetuals · mainnet-only',   status: 'SOON',     mark: '◎', accent: '#7a9a7a' },
-	];
+	function pad(n: number) { return String(n).padStart(2, '0'); }
 
-	let positions: Position[] = fallbackPositions;
-	let recentAlerts: AlertItem[] = fallbackAlerts;
-	let dataSource: 'LIVE' | 'DEMO' = 'DEMO';
-	let livePositions: Position[] = [];
-	let liveLoading = false;
-	let liveError = '';
-	let hasDriftAccount = false;
-	let currentWallet: string | null = null;
-
-	let totalCollateral = 0;
-	let totalDebt = 0;
-	let avgHealth = 0;
-	let criticalCount = 0;
-
-	function computeStats(posData: Position[]) {
-		totalCollateral = posData.reduce((s, p) => s + p.collateral, 0);
-		totalDebt = posData.reduce((s, p) => s + p.debt, 0);
-		avgHealth = posData.reduce((s, p) => s + p.healthFactor, 0) / posData.length;
-		criticalCount = posData.filter(p => p.riskLevel === 'Critical' || p.riskLevel === 'Danger').length;
+	function updateClock() {
+		const d = new Date();
+		opsTime = `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())} UTC`;
+		const s = Math.floor((Date.now() - mountedAt) / 1000);
+		uptime = `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`;
 	}
 
-	computeStats(positions);
+	onMount(() => {
+		// boot sequence
+		BOOT_SEQUENCE.forEach((line, i) => {
+			setTimeout(() => {
+				bootLines = [...bootLines, line];
+			}, 140 * i);
+		});
 
-	async function loadDemo() {
-		try {
-			const [statsRes, posRes, alertsRes] = await Promise.all([
-				fetch('/api/stats'),
-				fetch('/api/positions'),
-				fetch('/api/alerts'),
-			]);
+		// seed initial blips
+		for (let i = 0; i < 7; i++) blips.push(randomBlip());
+		blips = blips;
 
-			if (statsRes.ok && posRes.ok && alertsRes.ok) {
-				const statsData: Stats = await statsRes.json();
-				positions = await posRes.json();
-				recentAlerts = (await alertsRes.json()).slice(0, 3);
-				dataSource = 'LIVE';
-
-				totalCollateral = statsData.totalCollateral;
-				totalDebt = statsData.totalDebt;
-				avgHealth = statsData.avgHealthFactor;
-				criticalCount = statsData.atRiskCount;
-			}
-		} catch {
-			// API unavailable — keep fallback data
-		}
-	}
-
-	async function evaluateOnChain(raw: any): Promise<Position | null> {
-		const collateralSol = Number(raw.collateralLamports) / 1_000_000_000;
-		try {
-			const solPriceRes = await fetch('/api/pyth/SOL');
-			const solPrice = (await solPriceRes.json()).price;
-			const collateralUsd = collateralSol * solPrice;
-			const leverage = raw.leverageBps / 100;
-			const entryPrice = Number(raw.entryPriceMicro) / 1_000_000;
-
-			const res = await fetch('/api/sentinel/evaluate', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					id: raw.pda,
-					asset: raw.asset,
-					direction: raw.direction,
-					collateralUsd,
-					leverage,
-					entryPrice,
-					openedAt: raw.openedAt,
-					source: 'sentinel-onchain',
-				}),
+		// radar sweep
+		sweepTimer = setInterval(() => {
+			sweepAngle = (sweepAngle + 2) % 360;
+			tickCount += 1;
+			// acquire blips under the beam
+			blips = blips.map((b) => {
+				const delta = Math.abs(((b.angle - sweepAngle + 540) % 360) - 180);
+				if (delta > 172 && !b.acquired) {
+					return { ...b, acquired: true };
+				}
+				return b;
 			});
-			if (!res.ok) return null;
-			return await res.json();
-		} catch {
-			return null;
-		}
-	}
+		}, 30);
 
-	async function loadOnChainPositions(wallet: string): Promise<Position[]> {
-		try {
-			const mod = await import('$lib/onchain/openLeveraged');
-			const raw = await mod.listOnChainPositions(wallet);
-			const evaluated = await Promise.all(raw.map(evaluateOnChain));
-			return evaluated.filter((p): p is Position => p !== null);
-		} catch (e) {
-			console.warn('on-chain fetch failed', e);
-			return [];
-		}
-	}
+		// spawn/retire blips
+		blipTimer = setInterval(() => {
+			if (blips.length > 10) blips = blips.slice(1);
+			blips = [...blips, randomBlip()];
+			// rotate threat level
+			const critical = blips.filter((b) => b.severity === 'critical' && b.acquired).length;
+			const warning  = blips.filter((b) => b.severity === 'warning'  && b.acquired).length;
+			if (critical > 0) threatLevel = 'HIGH';
+			else if (warning >= 2) threatLevel = 'ELEVATED';
+			else threatLevel = 'NOMINAL';
+		}, 2500);
 
-	async function loadLivePositions(wallet: string) {
-		liveLoading = true;
-		liveError = '';
-		try {
-			const [paperRes, onChain, chainRes] = await Promise.all([
-				fetch(`/api/paper/positions/${wallet}`).then((r) => (r.ok ? r.json() : [])),
-				loadOnChainPositions(wallet),
-				fetch(`/api/positions/chain/${wallet}`).then((r) => (r.ok ? r.json() : { positions: [] })),
-			]);
-			const paper = Array.isArray(paperRes) ? paperRes : [];
-			const chain = Array.isArray(chainRes?.positions) ? chainRes.positions : [];
-			livePositions = [...onChain, ...paper, ...chain];
-			hasDriftAccount = livePositions.length > 0;
-		} catch (e: any) {
-			liveError = e?.message || 'failed to load live positions';
-			hasDriftAccount = false;
-			livePositions = [];
-		} finally {
-			liveLoading = false;
-		}
-	}
-
-	async function closePosition(pos: Position) {
-		if (!currentWallet) return;
-		try {
-			if (pos.source === 'sentinel-paper') {
-				await fetch(`/api/paper/close/${pos.id}?wallet=${currentWallet}`, { method: 'POST' });
-			} else if (pos.source === 'sentinel-onchain') {
-				const solPrice = (await (await fetch(`/api/pyth/${pos.asset.split('-')[0]}`)).json()).price;
-				const mod = await import('$lib/onchain/openLeveraged');
-				await mod.closeLeveragedPosition(pos.id, solPrice);
-			}
-			await loadLivePositions(currentWallet);
-		} catch (e: any) {
-			liveError = e?.message || 'close failed';
-		}
-	}
-
-	function handleOpened() {
-		if (currentWallet) loadLivePositions(currentWallet);
-	}
-
-	onMount(async () => {
-		await loadDemo();
+		clockTimer = setInterval(updateClock, 1000);
+		caretTimer = setInterval(() => (blinkCaret = !blinkCaret), 600);
+		updateClock();
 	});
 
-	walletStore.subscribe((state) => {
-		if (state.connected && state.address && state.address !== currentWallet) {
-			currentWallet = state.address;
-			loadLivePositions(state.address);
-		}
-		if (!state.connected) {
-			currentWallet = null;
-			livePositions = [];
-			hasDriftAccount = false;
-			liveError = '';
-		}
+	onDestroy(() => {
+		clearInterval(sweepTimer);
+		clearInterval(blipTimer);
+		clearInterval(clockTimer);
+		clearInterval(caretTimer);
 	});
 
-	$: mergedPositions = currentWallet
-		? livePositions
-		: positions;
-
-	function riskClass(level: RiskLevel): string {
-		return `badge-${level.toLowerCase()}`;
+	function initiate() {
+		goto('/dashboard');
 	}
 
-	function gaugeColor(hf: number): string {
-		if (hf >= 2.0) return 'var(--safe)';
-		if (hf >= 1.5) return 'var(--warning)';
-		if (hf >= 1.15) return 'var(--danger)';
-		return 'var(--critical)';
-	}
+	$: walletLabel = $walletStore.connected && $walletStore.address
+		? `${$walletStore.address.slice(0, 4)}…${$walletStore.address.slice(-4)}`
+		: 'NO OPERATOR';
 
-	function gaugeWidth(hf: number): number {
-		return Math.min(Math.max((hf / 5) * 100, 5), 100);
-	}
+	$: threatColor = threatLevel === 'HIGH'
+		? 'var(--critical)'
+		: threatLevel === 'ELEVATED'
+		? 'var(--warning)'
+		: 'var(--safe)';
 </script>
 
-<div class="dashboard">
-	<!-- Stats Row -->
-	<div class="stats-row">
-		<div class="stat-card">
-			<div class="stat-label">TOTAL COLLATERAL</div>
-			<div class="stat-value">${totalCollateral.toLocaleString()}</div>
+<svelte:head>
+	<title>Sentinel AI — Tactical Console</title>
+</svelte:head>
+
+<div class="tac-root">
+	<!-- Left HUD: boot log -->
+	<div class="hud hud-left">
+		<div class="hud-label">
+			<span class="hud-dot"></span>
+			SYS.BOOT
 		</div>
-		<div class="stat-card">
-			<div class="stat-label">TOTAL DEBT</div>
-			<div class="stat-value">${totalDebt.toLocaleString()}</div>
+		<div class="boot-log">
+			{#each bootLines as line, i}
+				<div class="boot-line" style="animation-delay: {i * 60}ms">{line}</div>
+			{/each}
+			<div class="boot-line caret">> awaiting operator{blinkCaret ? '_' : ' '}</div>
 		</div>
-		<div class="stat-card">
-			<div class="stat-label">AVG HEALTH FACTOR</div>
-			<div class="stat-value" style="color: {gaugeColor(avgHealth)}">{avgHealth.toFixed(2)}</div>
+
+		<div class="hud-label" style="margin-top: 14px;">
+			<span class="hud-dot"></span>
+			OPERATOR
 		</div>
-		<div class="stat-card">
-			<div class="stat-label">AT RISK</div>
-			<div class="stat-value" style="color: {criticalCount > 0 ? 'var(--critical)' : 'var(--safe)'}">{criticalCount}</div>
+		<div class="hud-kv">
+			<span class="k">ID</span>
+			<span class="v {$walletStore.connected ? 'v-ok' : 'v-dim'}">{walletLabel}</span>
+		</div>
+		<div class="hud-kv">
+			<span class="k">CLUSTER</span>
+			<span class="v v-ok">solana.devnet</span>
+		</div>
+		<div class="hud-kv">
+			<span class="k">LINK</span>
+			<span class="v v-ok">HELIUS/PYTH</span>
 		</div>
 	</div>
 
-	<!-- Supported Protocols -->
-	<div class="section-header">
-		<h2>SUPPORTED PROTOCOLS</h2>
-		<span class="count">{supportedProtocols.filter(p => p.status === 'TRACKING').length}/{supportedProtocols.length} online</span>
-	</div>
-	<div class="protocols-row">
-		{#each supportedProtocols as proto}
-			<div class="proto-card panel" class:proto-offline={proto.status !== 'TRACKING'}>
-				<div class="proto-mark" style="color: {proto.accent}">{proto.mark}</div>
-				<div class="proto-body">
-					<div class="proto-name">{proto.name}</div>
-					<div class="proto-kind">{proto.kind}</div>
+	<!-- Center Radar -->
+	<div class="radar-wrap">
+		<div class="radar-title">SENTINEL SCAN — DEVNET AREA</div>
+		<div class="radar">
+			<!-- range rings -->
+			<div class="ring r1"></div>
+			<div class="ring r2"></div>
+			<div class="ring r3"></div>
+			<div class="ring r4"></div>
+			<!-- cross axes -->
+			<div class="axis axis-h"></div>
+			<div class="axis axis-v"></div>
+			<!-- sweep -->
+			<div class="sweep" style="transform: rotate({sweepAngle}deg)"></div>
+			<!-- center pulse -->
+			<div class="center-pulse"></div>
+
+			<!-- blips -->
+			{#each blips as b (b.id)}
+				{@const rad = (b.angle * Math.PI) / 180}
+				{@const cx = 50 + Math.cos(rad) * (b.radius / 4)}
+				{@const cy = 50 + Math.sin(rad) * (b.radius / 4)}
+				<div
+					class="blip blip-{b.severity}"
+					class:acquired={b.acquired}
+					style="left: {cx}%; top: {cy}%;"
+				>
+					<span class="blip-dot"></span>
+					{#if b.acquired}
+						<span class="blip-label">{b.label}</span>
+					{/if}
 				</div>
-				<span class="proto-status proto-status-{proto.status.toLowerCase()}">{proto.status}</span>
-			</div>
-		{/each}
-	</div>
-
-	{#if currentWallet}
-		<div class="live-banner panel" class:live-ok={livePositions.length > 0} class:live-empty={livePositions.length === 0 && !liveLoading && !liveError}>
-			<div class="live-banner-left">
-				<span class="live-dot"></span>
-				<span class="live-title">
-					{#if liveLoading}
-						Loading positions for {currentWallet.slice(0, 4)}…{currentWallet.slice(-4)}
-					{:else if liveError}
-						Position reader error: {liveError}
-					{:else if livePositions.length > 0}
-						LIVE · {livePositions.length} tracked position{livePositions.length === 1 ? '' : 's'} for {currentWallet.slice(0, 4)}…{currentWallet.slice(-4)}
-					{:else}
-						Wallet {currentWallet.slice(0, 4)}…{currentWallet.slice(-4)} connected · no open positions yet
-					{/if}
-				</span>
-			</div>
-			<div class="live-banner-actions">
-				<button class="live-cta" on:click={() => modalOpen = true}>
-					+ OPEN POSITION
-				</button>
-				{#if livePositions.length > 0}
-					<button class="live-refresh" on:click={() => currentWallet && loadLivePositions(currentWallet)}>REFRESH</button>
-				{/if}
-			</div>
+			{/each}
 		</div>
-	{/if}
-
-	<OpenPositionModal
-		open={modalOpen}
-		wallet={currentWallet}
-		{onChainAvailable}
-		on:close={() => modalOpen = false}
-		on:opened={handleOpened}
-	/>
-
-	<!-- Positions Grid -->
-	<div class="section-header">
-		<h2>MONITORED POSITIONS</h2>
-		<div class="section-meta">
-			{#if currentWallet && livePositions.length > 0}
-				<span class="data-badge live">LIVE · DEVNET</span>
-			{:else if currentWallet}
-				<span class="data-badge">NO POSITIONS</span>
-			{:else}
-				<span class="data-badge" class:live={dataSource === 'LIVE'}>{dataSource}</span>
-			{/if}
-			<span class="count">{mergedPositions.length} active</span>
+		<div class="radar-foot">
+			<span>RANGE 2500km</span>
+			<span>BEAM {sweepAngle.toString().padStart(3, '0')}°</span>
+			<span>TICK {tickCount.toLocaleString()}</span>
 		</div>
 	</div>
-	<div class="positions-grid">
-		{#each mergedPositions as pos}
-			<div class="position-card panel" class:pos-live={pos.source === 'sentinel-onchain' || pos.source === 'drift-devnet'} class:pos-balance={pos.source === 'native' || pos.source === 'spl' || pos.source === 'marinade'}>
-				<div class="pos-header">
-					<div>
-						<span class="pos-protocol">
-							{pos.protocol}
-							{#if pos.source === 'sentinel-onchain'}<span class="live-tag">ON-CHAIN</span>{/if}
-							{#if pos.source === 'sentinel-paper'}<span class="live-tag paper">PAPER</span>{/if}
-							{#if pos.source === 'kamino' || pos.source === 'marginfi'}<span class="live-tag live">LIVE</span>{/if}
-							{#if pos.source === 'marinade'}<span class="live-tag stake">STAKED</span>{/if}
-							{#if pos.source === 'native' || pos.source === 'spl'}<span class="live-tag wallet">WALLET</span>{/if}
-						</span>
-						<span class="pos-asset">{pos.asset}{#if pos.direction && pos.direction !== 'FLAT'} · <span class="dir dir-{pos.direction.toLowerCase()}">{pos.direction}</span>{/if}</span>
-					</div>
-					<span class="badge {riskClass(pos.riskLevel)}">{pos.riskLevel}</span>
-				</div>
-				{#if pos.healthFactor !== undefined && pos.source !== 'native' && pos.source !== 'spl' && pos.source !== 'marinade'}
-					<div class="pos-health">
-						<div class="health-label">
-							<span>Health Factor</span>
-							<span style="color: {gaugeColor(pos.healthFactor)}">{pos.healthFactor.toFixed(2)}{#if pos.healthPercent !== undefined} · {pos.healthPercent.toFixed(0)}%{/if}</span>
-						</div>
-						<div class="gauge-bar">
-							<div class="gauge-fill" style="width: {gaugeWidth(pos.healthFactor)}%; background: {gaugeColor(pos.healthFactor)}"></div>
-						</div>
-					</div>
-				{/if}
-				<div class="pos-details">
-					{#if pos.balance !== undefined}
-						<div class="detail-row">
-							<span class="detail-label">Balance</span>
-							<span class="detail-value">{pos.balance.toLocaleString(undefined, { maximumFractionDigits: 6 })} {pos.asset}</span>
-						</div>
-					{/if}
-					{#if pos.solEquivalent !== undefined}
-						<div class="detail-row">
-							<span class="detail-label">≈ in SOL</span>
-							<span class="detail-value">{pos.solEquivalent.toFixed(4)} SOL</span>
-						</div>
-					{/if}
-					{#if pos.exchangeRate !== undefined}
-						<div class="detail-row">
-							<span class="detail-label">mSOL / SOL</span>
-							<span class="detail-value">{pos.exchangeRate.toFixed(4)}</span>
-						</div>
-					{/if}
-					{#if pos.collateral !== undefined && pos.balance === undefined}
-						<div class="detail-row">
-							<span class="detail-label">Collateral</span>
-							<span class="detail-value">${pos.collateral.toLocaleString()}</span>
-						</div>
-					{/if}
-					{#if pos.notional !== undefined}
-						<div class="detail-row">
-							<span class="detail-label">Notional</span>
-							<span class="detail-value">${pos.notional.toLocaleString()}</span>
-						</div>
-					{:else if pos.debt !== undefined && pos.balance === undefined}
-						<div class="detail-row">
-							<span class="detail-label">Debt</span>
-							<span class="detail-value">${pos.debt.toLocaleString()}</span>
-						</div>
-					{/if}
-					{#if pos.leverage}
-						<div class="detail-row">
-							<span class="detail-label">Leverage</span>
-							<span class="detail-value">{pos.leverage.toFixed(2)}x</span>
-						</div>
-					{/if}
-					{#if pos.unrealizedPnl !== undefined}
-						<div class="detail-row">
-							<span class="detail-label">Unrealized PnL</span>
-							<span class="detail-value" style="color: {pos.unrealizedPnl >= 0 ? 'var(--safe)' : 'var(--critical)'}">
-								{pos.unrealizedPnl >= 0 ? '+' : ''}${pos.unrealizedPnl.toLocaleString()}
-							</span>
-						</div>
-					{/if}
-					<div class="detail-row">
-						<span class="detail-label">Last Check</span>
-						<span class="detail-value dim">{pos.lastChecked}</span>
-					</div>
-				</div>
 
-				{#if pos.advice && pos.advice.length > 0}
-					<div class="advice-block">
-						<div class="advice-header">BOT ADVICE</div>
-						{#each pos.advice as tip}
-							<div class="advice-tip advice-{tip.severity.toLowerCase()}">
-								<div class="advice-title">{tip.title}</div>
-								<div class="advice-body">{tip.body}</div>
-							</div>
-						{/each}
-					</div>
-				{/if}
-
-				{#if pos.source === 'sentinel-paper' || pos.source === 'sentinel-onchain'}
-					<div class="pos-actions">
-						<button class="close-pos-btn" on:click={() => closePosition(pos)}>CLOSE POSITION</button>
-					</div>
-				{/if}
+	<!-- Right HUD: systems + threat -->
+	<div class="hud hud-right">
+		<div class="hud-label">
+			<span class="hud-dot dot-red"></span>
+			THREAT LEVEL
+		</div>
+		<div class="threat" style="color: {threatColor}; border-color: {threatColor}">
+			<div class="threat-value">{threatLevel}</div>
+			<div class="threat-meter">
+				<div class="threat-fill" style="
+					background: {threatColor};
+					width: {threatLevel === 'HIGH' ? 100 : threatLevel === 'ELEVATED' ? 60 : 25}%
+				"></div>
 			</div>
-		{/each}
+		</div>
+
+		<div class="hud-label" style="margin-top: 16px;">
+			<span class="hud-dot"></span>
+			TRACKED PROTOCOLS
+		</div>
+		<div class="proto-list">
+			{#each ['Sentinel Perps', 'Kamino', 'MarginFi', 'Marinade', 'Wallet', 'Pyth oracles'] as p}
+				<div class="proto-row">
+					<span class="proto-mark"></span>
+					<span class="proto-name">{p}</span>
+					<span class="proto-ok">LIVE</span>
+				</div>
+			{/each}
+		</div>
+
+		<div class="hud-label" style="margin-top: 16px;">
+			<span class="hud-dot"></span>
+			METRICS
+		</div>
+		<div class="hud-kv">
+			<span class="k">OPS.TIME</span>
+			<span class="v v-mono">{opsTime}</span>
+		</div>
+		<div class="hud-kv">
+			<span class="k">UPTIME</span>
+			<span class="v v-mono">{uptime}</span>
+		</div>
+		<div class="hud-kv">
+			<span class="k">BLIPS</span>
+			<span class="v v-mono">{blips.length}</span>
+		</div>
 	</div>
 
-	<!-- Recent Alerts -->
-	<div class="section-header" style="margin-top: 32px;">
-		<h2>RECENT ALERTS</h2>
-		<a href="/alerts" class="view-all">View All &raquo;</a>
+	<!-- CTA -->
+	<div class="cta-wrap">
+		<button class="cta" on:click={initiate}>
+			<span class="cta-bracket">&gt;</span>
+			INITIATE MONITORING
+			<span class="cta-bracket">&lt;</span>
+		</button>
+		<div class="cta-sub">Enter the tactical console · Ctrl+K to jump</div>
 	</div>
-	<div class="alerts-list">
-		{#each recentAlerts as alert}
-			<div class="alert-row panel">
-				<span class="badge {riskClass(alert.severity)}">{alert.type}</span>
-				<span class="alert-message">{alert.message}</span>
-				<span class="alert-time">{alert.timestamp}</span>
-			</div>
-		{/each}
-	</div>
+
+	<!-- Corners -->
+	<div class="corner tl"></div>
+	<div class="corner tr"></div>
+	<div class="corner bl"></div>
+	<div class="corner br"></div>
+
+	<!-- Scanlines + noise -->
+	<div class="scanlines"></div>
+	<div class="vignette"></div>
 </div>
 
 <style>
-	.dashboard {
-		display: flex;
-		flex-direction: column;
-		gap: 16px;
+	:global(body) {
+		overflow: hidden;
 	}
 
-	.stats-row {
+	.tac-root {
+		position: fixed;
+		inset: 0;
+		top: 60px; /* topbar height */
 		display: grid;
-		grid-template-columns: repeat(4, 1fr);
-		gap: 12px;
+		grid-template-columns: 280px 1fr 280px;
+		grid-template-rows: 1fr auto;
+		gap: 18px;
+		padding: 18px;
+		background:
+			radial-gradient(ellipse at center, rgba(61, 220, 132, 0.04) 0%, transparent 60%),
+			linear-gradient(180deg, #070d07 0%, #0a0f0a 100%);
+		overflow: hidden;
 	}
 
-	.stat-card {
-		background: var(--bg-panel);
-		border: 1px solid var(--border);
-		border-radius: 4px;
+	/* corners */
+	.corner {
+		position: absolute;
+		width: 28px;
+		height: 28px;
+		border: 1px solid var(--accent-green);
+		opacity: 0.6;
+	}
+	.tl { top: 10px; left: 10px; border-right: none; border-bottom: none; }
+	.tr { top: 10px; right: 10px; border-left: none; border-bottom: none; }
+	.bl { bottom: 10px; left: 10px; border-right: none; border-top: none; }
+	.br { bottom: 10px; right: 10px; border-left: none; border-top: none; }
+
+	.scanlines {
+		position: absolute;
+		inset: 0;
+		background: repeating-linear-gradient(
+			0deg,
+			rgba(61, 220, 132, 0.03) 0px,
+			rgba(61, 220, 132, 0.03) 1px,
+			transparent 1px,
+			transparent 3px
+		);
+		pointer-events: none;
+		mix-blend-mode: screen;
+		animation: scan-shift 8s linear infinite;
+	}
+
+	.vignette {
+		position: absolute;
+		inset: 0;
+		background: radial-gradient(
+			ellipse at center,
+			transparent 40%,
+			rgba(0, 0, 0, 0.55) 100%
+		);
+		pointer-events: none;
+	}
+
+	@keyframes scan-shift {
+		from { background-position: 0 0; }
+		to { background-position: 0 3px; }
+	}
+
+	/* HUD panels */
+	.hud {
+		background: rgba(10, 15, 10, 0.65);
+		border: 1px solid var(--border-bright);
+		border-radius: 3px;
 		padding: 16px;
+		backdrop-filter: blur(6px);
+		font-family: 'IBM Plex Mono', monospace;
+		animation: hud-enter 480ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+	}
+	.hud-left  { animation-delay: 0ms;  }
+	.hud-right { animation-delay: 120ms; }
+
+	@keyframes hud-enter {
+		from { opacity: 0; transform: translateX(-10px); filter: blur(6px); }
+		to   { opacity: 1; transform: none; filter: blur(0); }
+	}
+	.hud-right { animation-name: hud-enter-right; }
+	@keyframes hud-enter-right {
+		from { opacity: 0; transform: translateX(10px); filter: blur(6px); }
+		to   { opacity: 1; transform: none; filter: blur(0); }
 	}
 
-	.stat-label {
-		font-size: 10px;
-		font-weight: 600;
-		color: var(--text-dim);
-		letter-spacing: 1px;
-		margin-bottom: 8px;
-	}
-
-	.stat-value {
-		font-size: 24px;
-		font-weight: 700;
-		color: var(--text-primary);
-	}
-
-	.section-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-top: 16px;
-	}
-
-	.section-header h2 {
-		font-size: 12px;
-		font-weight: 600;
-		color: var(--text-secondary);
-		letter-spacing: 1.5px;
-	}
-
-	.section-meta {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-	}
-
-	.count {
-		font-size: 11px;
-		color: var(--text-dim);
-	}
-
-	.data-badge {
+	.hud-label {
 		font-size: 9px;
 		font-weight: 700;
-		letter-spacing: 1px;
-		padding: 2px 6px;
-		border-radius: 2px;
-		background: rgba(255, 170, 0, 0.15);
-		color: var(--warning);
-	}
-
-	.data-badge.live {
-		background: rgba(61, 220, 132, 0.15);
-		color: var(--safe);
-	}
-
-	.view-all {
-		font-size: 11px;
-	}
-
-	.positions-grid {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: 12px;
-	}
-
-	.position-card {
-		padding: 16px;
-	}
-
-	.pos-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: flex-start;
-		margin-bottom: 12px;
-	}
-
-	.pos-protocol {
-		font-size: 10px;
+		letter-spacing: 2px;
 		color: var(--text-dim);
-		text-transform: uppercase;
-		letter-spacing: 1px;
-		display: block;
-		margin-bottom: 2px;
-	}
-
-	.pos-asset {
-		font-size: 15px;
-		font-weight: 600;
-		color: var(--text-primary);
-	}
-
-	.pos-health {
-		margin-bottom: 14px;
-	}
-
-	.health-label {
+		margin-bottom: 8px;
 		display: flex;
-		justify-content: space-between;
-		font-size: 11px;
-		color: var(--text-secondary);
-		margin-bottom: 6px;
-	}
-
-	.pos-details {
-		display: flex;
-		flex-direction: column;
+		align-items: center;
 		gap: 6px;
 	}
 
-	.detail-row {
-		display: flex;
-		justify-content: space-between;
-		font-size: 11px;
-	}
-
-	.detail-label {
-		color: var(--text-dim);
-	}
-
-	.detail-value {
-		color: var(--text-secondary);
-	}
-
-	.detail-value.dim {
-		color: var(--text-dim);
-	}
-
-	.alerts-list {
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-	}
-
-	.alert-row {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		padding: 12px 16px;
-	}
-
-	.alert-message {
-		flex: 1;
-		font-size: 12px;
-		color: var(--text-secondary);
-	}
-
-	.alert-time {
-		font-size: 10px;
-		color: var(--text-dim);
-		white-space: nowrap;
-	}
-
-	.live-banner {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 12px 16px;
-		border-left: 3px solid var(--accent-amber);
-	}
-
-	.live-banner.live-ok {
-		border-left-color: var(--accent-green);
-	}
-
-	.live-banner.live-empty {
-		border-left-color: var(--text-dim);
-	}
-
-	.live-banner-left {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-	}
-
-	.live-dot {
-		width: 8px;
-		height: 8px;
+	.hud-dot {
+		width: 6px;
+		height: 6px;
 		border-radius: 50%;
-		background: var(--accent-amber);
-		animation: pulse-glow 2s infinite;
-	}
-
-	.live-banner.live-ok .live-dot {
 		background: var(--accent-green);
+		box-shadow: 0 0 6px var(--accent-green);
+		animation: pulse-hud 1.6s ease-in-out infinite;
+	}
+	.hud-dot.dot-red {
+		background: var(--critical);
+		box-shadow: 0 0 6px var(--critical);
 	}
 
-	.live-banner.live-empty .live-dot {
-		background: var(--text-dim);
-		animation: none;
+	@keyframes pulse-hud {
+		0%, 100% { opacity: 1; }
+		50%      { opacity: 0.3; }
 	}
 
-	.live-title {
-		font-size: 11px;
-		color: var(--text-primary);
-		letter-spacing: 0.5px;
-	}
-
-	.live-banner-actions {
-		display: flex;
-		gap: 6px;
-	}
-
-	.live-cta, .live-refresh {
-		background: transparent;
-		border: 1px solid var(--border-bright);
-		color: var(--accent-green);
-		font-family: inherit;
+	.boot-log {
 		font-size: 10px;
-		font-weight: 700;
-		letter-spacing: 1px;
-		padding: 5px 10px;
-		border-radius: 2px;
-		cursor: pointer;
-		text-decoration: none;
-	}
-
-	.live-cta:hover, .live-refresh:hover {
-		border-color: var(--accent-green);
-	}
-
-	.pos-actions {
-		margin-top: 12px;
-		padding-top: 10px;
-		border-top: 1px dashed var(--border);
-	}
-
-	.close-pos-btn {
-		width: 100%;
-		background: transparent;
-		border: 1px solid var(--border-bright);
+		line-height: 1.55;
 		color: var(--text-secondary);
-		font-family: inherit;
-		font-size: 10px;
-		font-weight: 700;
-		letter-spacing: 1.5px;
-		padding: 8px;
-		border-radius: 2px;
-		cursor: pointer;
+		max-height: 170px;
+		overflow: hidden;
 	}
 
-	.close-pos-btn:hover {
-		border-color: var(--critical);
-		color: var(--critical);
-	}
-
-	.live-tag {
-		display: inline-block;
-		margin-left: 6px;
-		font-size: 8px;
-		font-weight: 700;
-		color: var(--accent-green);
-		background: rgba(61,220,132,0.12);
-		padding: 1px 4px;
-		border-radius: 2px;
-		letter-spacing: 1px;
-	}
-
-	.live-tag.paper {
-		color: var(--warning);
-		background: rgba(255,170,0,0.12);
-	}
-
-	.live-tag.stake {
-		color: #52c4ff;
-		background: rgba(82,196,255,0.12);
-	}
-
-	.live-tag.wallet {
-		color: #7a9a7a;
-		background: rgba(122,154,122,0.15);
-	}
-
-	.pos-live {
-		border-color: rgba(160, 123, 255, 0.4);
-	}
-
-	.pos-balance {
-		border-color: rgba(82, 196, 255, 0.25);
-	}
-
-	.dir {
-		font-size: 10px;
-		font-weight: 700;
-		letter-spacing: 1px;
-		padding: 1px 4px;
-		border-radius: 2px;
-		margin-left: 4px;
-	}
-
-	.dir-long { background: rgba(61,220,132,0.15); color: var(--safe); }
-	.dir-short { background: rgba(255,68,68,0.15); color: var(--critical); }
-
-	.advice-block {
-		margin-top: 14px;
-		padding-top: 12px;
-		border-top: 1px dashed var(--border);
-	}
-
-	.advice-header {
-		font-size: 9px;
-		color: var(--text-dim);
-		letter-spacing: 1.5px;
-		margin-bottom: 8px;
-	}
-
-	.advice-tip {
-		padding: 8px 10px;
-		margin-bottom: 6px;
-		border-radius: 2px;
-		border-left: 2px solid transparent;
-		background: rgba(255,255,255,0.02);
-	}
-
-	.advice-tip:last-child { margin-bottom: 0; }
-
-	.advice-critical { border-left-color: var(--critical); }
-	.advice-warning  { border-left-color: var(--warning); }
-	.advice-danger   { border-left-color: var(--danger); }
-	.advice-safe     { border-left-color: var(--safe); }
-
-	.advice-title {
-		font-size: 11px;
-		font-weight: 600;
-		color: var(--text-primary);
-		margin-bottom: 3px;
-	}
-
-	.advice-body {
-		font-size: 11px;
-		color: var(--text-secondary);
-		line-height: 1.4;
-	}
-
-	.protocols-row {
-		display: grid;
-		grid-template-columns: repeat(5, 1fr);
-		gap: 10px;
-	}
-
-	.proto-card {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		padding: 12px;
-		position: relative;
-	}
-
-	.proto-card.proto-offline {
-		opacity: 0.55;
-	}
-
-	.proto-mark {
-		font-size: 22px;
-		line-height: 1;
-		min-width: 22px;
-		text-align: center;
-	}
-
-	.proto-body {
-		flex: 1;
-		min-width: 0;
-	}
-
-	.proto-name {
-		font-size: 12px;
-		font-weight: 700;
-		color: var(--text-primary);
-		letter-spacing: 0.5px;
-	}
-
-	.proto-kind {
-		font-size: 9px;
-		color: var(--text-dim);
-		margin-top: 2px;
-		letter-spacing: 0.3px;
-	}
-
-	.proto-status {
-		font-size: 8px;
-		font-weight: 700;
-		letter-spacing: 1px;
-		padding: 2px 5px;
-		border-radius: 2px;
-	}
-
-	.proto-status-tracking {
-		background: rgba(61,220,132,0.15);
+	.boot-line {
+		white-space: pre;
+		animation: boot-in 220ms steps(40, end) both;
 		color: var(--safe);
 	}
+	.boot-line.caret { color: var(--text-dim); margin-top: 4px; }
 
-	.proto-status-offline {
-		background: rgba(255,68,68,0.1);
-		color: var(--text-dim);
+	@keyframes boot-in {
+		from { clip-path: inset(0 100% 0 0); opacity: 0.4; }
+		to   { clip-path: inset(0 0 0 0);    opacity: 1; }
 	}
 
-	.proto-status-soon {
-		background: rgba(255,170,0,0.12);
-		color: var(--warning);
+	.hud-kv {
+		display: flex;
+		justify-content: space-between;
+		font-size: 10px;
+		line-height: 1.8;
+	}
+	.hud-kv .k { color: var(--text-dim); letter-spacing: 1px; }
+	.hud-kv .v { color: var(--text-primary); font-weight: 500; }
+	.hud-kv .v-ok { color: var(--safe); }
+	.hud-kv .v-dim { color: var(--text-dim); }
+	.hud-kv .v-mono { font-variant-numeric: tabular-nums; }
+
+	/* threat */
+	.threat {
+		border: 1px solid;
+		border-radius: 3px;
+		padding: 10px;
+		margin-bottom: 4px;
+	}
+	.threat-value {
+		font-size: 18px;
+		font-weight: 800;
+		letter-spacing: 3px;
+		text-align: center;
+		margin-bottom: 6px;
+		animation: threat-flash 2s ease-in-out infinite;
+	}
+	@keyframes threat-flash {
+		0%, 100% { text-shadow: 0 0 4px currentColor; }
+		50%      { text-shadow: 0 0 14px currentColor; }
+	}
+	.threat-meter {
+		height: 4px;
+		background: rgba(255, 255, 255, 0.05);
+		border-radius: 2px;
+		overflow: hidden;
+	}
+	.threat-fill {
+		height: 100%;
+		transition: width 400ms ease, background 400ms ease;
+	}
+
+	.proto-list {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+	.proto-row {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		font-size: 10px;
+		padding: 3px 0;
+	}
+	.proto-mark {
+		width: 4px;
+		height: 4px;
+		background: var(--accent-green);
+		border-radius: 50%;
+	}
+	.proto-name {
+		flex: 1;
+		color: var(--text-secondary);
+	}
+	.proto-ok {
+		font-size: 8px;
+		font-weight: 700;
+		color: var(--safe);
+		letter-spacing: 1px;
+	}
+
+	/* Radar */
+	.radar-wrap {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 10px;
+		animation: radar-enter 700ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+	}
+	@keyframes radar-enter {
+		from { opacity: 0; transform: scale(0.94); filter: blur(8px); }
+		to   { opacity: 1; transform: none;        filter: blur(0); }
+	}
+
+	.radar-title {
+		font-size: 10px;
+		font-weight: 700;
+		letter-spacing: 3px;
+		color: var(--text-dim);
+	}
+	.radar {
+		position: relative;
+		width: min(65vh, 520px);
+		aspect-ratio: 1 / 1;
+		border-radius: 50%;
+		background:
+			radial-gradient(circle at center, rgba(61, 220, 132, 0.06) 0%, transparent 60%),
+			rgba(10, 20, 10, 0.7);
+		border: 1px solid rgba(61, 220, 132, 0.35);
+		box-shadow:
+			inset 0 0 80px rgba(61, 220, 132, 0.08),
+			0 0 40px rgba(61, 220, 132, 0.1);
+		overflow: hidden;
+	}
+
+	.ring {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		border: 1px solid rgba(61, 220, 132, 0.18);
+		border-radius: 50%;
+	}
+	.r1 { width: 25%; height: 25%; }
+	.r2 { width: 50%; height: 50%; }
+	.r3 { width: 75%; height: 75%; }
+	.r4 { width: 100%; height: 100%; border-color: rgba(61, 220, 132, 0.28); }
+
+	.axis {
+		position: absolute;
+		background: rgba(61, 220, 132, 0.12);
+	}
+	.axis-h { top: 50%; left: 0; right: 0; height: 1px; }
+	.axis-v { left: 50%; top: 0; bottom: 0; width: 1px; }
+
+	.sweep {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 50%;
+		height: 50%;
+		transform-origin: 0 0;
+		background: conic-gradient(
+			from 0deg,
+			rgba(61, 220, 132, 0.6) 0deg,
+			rgba(61, 220, 132, 0.2) 18deg,
+			rgba(61, 220, 132, 0.05) 36deg,
+			transparent 60deg
+		);
+		border-radius: 50%;
+		clip-path: polygon(0 0, 100% 0, 100% 100%);
+		pointer-events: none;
+	}
+
+	.center-pulse {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 10px;
+		height: 10px;
+		margin: -5px 0 0 -5px;
+		border-radius: 50%;
+		background: var(--accent-green);
+		box-shadow: 0 0 8px var(--accent-green);
+		animation: center-pulse 1.4s ease-in-out infinite;
+	}
+	@keyframes center-pulse {
+		0%, 100% { transform: scale(1);  box-shadow: 0 0 8px var(--accent-green); }
+		50%      { transform: scale(1.6); box-shadow: 0 0 18px var(--accent-green); }
+	}
+
+	.blip {
+		position: absolute;
+		transform: translate(-50%, -50%);
+		pointer-events: none;
+	}
+	.blip-dot {
+		display: block;
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: currentColor;
+		box-shadow: 0 0 10px currentColor;
+	}
+	.blip-label {
+		position: absolute;
+		left: 10px;
+		top: -5px;
+		font-size: 8px;
+		font-weight: 700;
+		letter-spacing: 1px;
+		color: currentColor;
+		white-space: nowrap;
+		text-shadow: 0 0 6px currentColor;
+		animation: label-in 300ms ease both;
+	}
+	@keyframes label-in {
+		from { opacity: 0; transform: translateX(-3px); }
+		to   { opacity: 1; transform: none; }
+	}
+	.blip.acquired .blip-dot {
+		animation: blip-flash 2.2s ease-out forwards;
+	}
+	@keyframes blip-flash {
+		0%   { transform: scale(2.2); opacity: 1; }
+		20%  { transform: scale(1);   opacity: 1; }
+		100% { transform: scale(1);   opacity: 0.35; }
+	}
+
+	.blip-safe     { color: var(--safe); }
+	.blip-warning  { color: var(--warning); }
+	.blip-critical { color: var(--critical); }
+
+	.radar-foot {
+		display: flex;
+		gap: 22px;
+		font-size: 9px;
+		font-weight: 700;
+		letter-spacing: 2px;
+		color: var(--text-dim);
+		font-variant-numeric: tabular-nums;
+	}
+
+	/* CTA */
+	.cta-wrap {
+		grid-column: 1 / -1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 6px;
+		padding-bottom: 8px;
+	}
+
+	.cta {
+		background: transparent;
+		border: 1px solid var(--accent-green);
+		color: var(--accent-green);
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 13px;
+		font-weight: 800;
+		letter-spacing: 4px;
+		padding: 12px 28px;
+		cursor: pointer;
+		position: relative;
+		overflow: hidden;
+		transition: all 200ms ease;
+		animation: cta-breath 3s ease-in-out infinite;
+	}
+
+	.cta:hover {
+		background: var(--accent-green);
+		color: #000;
+		letter-spacing: 5px;
+	}
+
+	.cta-bracket {
+		display: inline-block;
+		margin: 0 8px;
+		opacity: 0.5;
+	}
+
+	.cta:hover .cta-bracket { opacity: 1; }
+
+	@keyframes cta-breath {
+		0%, 100% { box-shadow: 0 0 6px rgba(61, 220, 132, 0.3),  inset 0 0 6px rgba(61, 220, 132, 0.1); }
+		50%      { box-shadow: 0 0 22px rgba(61, 220, 132, 0.6), inset 0 0 14px rgba(61, 220, 132, 0.2); }
+	}
+
+	.cta-sub {
+		font-size: 9px;
+		color: var(--text-dim);
+		letter-spacing: 2px;
 	}
 
 	@media (max-width: 900px) {
-		.protocols-row {
-			grid-template-columns: repeat(2, 1fr);
-		}
-	}
-
-	@media (max-width: 768px) {
-		.stats-row {
-			grid-template-columns: repeat(2, 1fr);
-		}
-		.positions-grid {
+		.tac-root {
 			grid-template-columns: 1fr;
+			grid-template-rows: auto 1fr auto auto;
 		}
+		.radar { width: min(70vw, 340px); }
 	}
 </style>

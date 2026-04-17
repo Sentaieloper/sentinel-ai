@@ -1,0 +1,21 @@
+{
+  "name": "sentinel-chain-reader",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@solana/web3.js": "1.95.4",
+    "@solana/spl-token": "0.4.8",
+    "@kamino-finance/klend-sdk": "^3.2.0",
+    "@mrgnlabs/marginfi-client-v2": "^3.0.0",
+    "@mrgnlabs/mrgn-common": "^1.7.0",
+    "bn.js": "^5.2.1",
+    "decimal.js": "^10.4.3",
+    "express": "4.19.2",
+    "cors": "2.8.5"
+  }
+}

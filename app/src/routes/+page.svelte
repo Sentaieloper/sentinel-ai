@@ -19,7 +19,7 @@
 		id: string;
 		protocol: string;
 		asset: string;
-		healthFactor: number;
+		healthFactor?: number;
 		healthPercent?: number;
 		leverage?: number;
 		direction?: 'LONG' | 'SHORT' | 'FLAT';
@@ -27,8 +27,11 @@
 		oraclePrice?: number;
 		notional?: number;
 		unrealizedPnl?: number;
-		collateral: number;
-		debt: number;
+		collateral?: number;
+		debt?: number;
+		balance?: number;
+		solEquivalent?: number;
+		exchangeRate?: number;
 		riskLevel: RiskLevel;
 		lastChecked: string;
 		source?: string;
@@ -73,11 +76,14 @@
 	}
 
 	const supportedProtocols: SupportedProtocol[] = [
-		{ name: 'Drift',    kind: 'Perpetuals · devnet',       status: 'TRACKING', mark: '◈', accent: '#a07bff' },
-		{ name: 'Kamino',   kind: 'Lending · devnet',          status: 'TRACKING', mark: '▣', accent: '#ff8c42' },
-		{ name: 'Marinade', kind: 'Liquid staking · devnet',   status: 'TRACKING', mark: '◆', accent: '#52c4ff' },
-		{ name: 'Zeta',     kind: 'Perpetuals · offline',      status: 'OFFLINE',  mark: '◉', accent: '#7a9a7a' },
-		{ name: 'Jupiter',  kind: 'Perpetuals · mainnet-only', status: 'SOON',     mark: '◎', accent: '#3ddc84' },
+		{ name: 'Sentinel Perps', kind: 'On-chain leverage · devnet',  status: 'TRACKING', mark: '▲', accent: '#3ddc84' },
+		{ name: 'Kamino',         kind: 'Lending · devnet',            status: 'TRACKING', mark: '▣', accent: '#ff8c42' },
+		{ name: 'MarginFi',       kind: 'Lending · devnet',            status: 'TRACKING', mark: '◇', accent: '#b07bff' },
+		{ name: 'Marinade',       kind: 'Liquid staking · devnet',     status: 'TRACKING', mark: '◆', accent: '#52c4ff' },
+		{ name: 'Wallet',         kind: 'SOL + SPL balances · devnet', status: 'TRACKING', mark: '●', accent: '#3ddc84' },
+		{ name: 'Drift',          kind: 'Perpetuals · paused',         status: 'OFFLINE',  mark: '◈', accent: '#7a9a7a' },
+		{ name: 'Zeta',           kind: 'Perpetuals · shutdown',       status: 'OFFLINE',  mark: '◉', accent: '#7a9a7a' },
+		{ name: 'Jupiter',        kind: 'Perpetuals · mainnet-only',   status: 'SOON',     mark: '◎', accent: '#7a9a7a' },
 	];
 
 	let positions: Position[] = fallbackPositions;
@@ -173,12 +179,14 @@
 		liveLoading = true;
 		liveError = '';
 		try {
-			const [paperRes, onChain] = await Promise.all([
+			const [paperRes, onChain, chainRes] = await Promise.all([
 				fetch(`/api/paper/positions/${wallet}`).then((r) => (r.ok ? r.json() : [])),
 				loadOnChainPositions(wallet),
+				fetch(`/api/positions/chain/${wallet}`).then((r) => (r.ok ? r.json() : { positions: [] })),
 			]);
 			const paper = Array.isArray(paperRes) ? paperRes : [];
-			livePositions = [...onChain, ...paper];
+			const chain = Array.isArray(chainRes?.positions) ? chainRes.positions : [];
+			livePositions = [...onChain, ...paper, ...chain];
 			hasDriftAccount = livePositions.length > 0;
 		} catch (e: any) {
 			liveError = e?.message || 'failed to load live positions';
@@ -226,8 +234,8 @@
 		}
 	});
 
-	$: mergedPositions = livePositions.length > 0
-		? [...livePositions, ...positions.filter(p => p.protocol !== 'Drift')]
+	$: mergedPositions = currentWallet
+		? livePositions
 		: positions;
 
 	function riskClass(level: RiskLevel): string {
@@ -324,8 +332,10 @@
 	<div class="section-header">
 		<h2>MONITORED POSITIONS</h2>
 		<div class="section-meta">
-			{#if livePositions.length > 0}
-				<span class="data-badge live">LIVE · DRIFT DEVNET</span>
+			{#if currentWallet && livePositions.length > 0}
+				<span class="data-badge live">LIVE · DEVNET</span>
+			{:else if currentWallet}
+				<span class="data-badge">NO POSITIONS</span>
 			{:else}
 				<span class="data-badge" class:live={dataSource === 'LIVE'}>{dataSource}</span>
 			{/if}
@@ -334,37 +344,63 @@
 	</div>
 	<div class="positions-grid">
 		{#each mergedPositions as pos}
-			<div class="position-card panel" class:pos-live={pos.source === 'drift-devnet'}>
+			<div class="position-card panel" class:pos-live={pos.source === 'sentinel-onchain' || pos.source === 'drift-devnet'} class:pos-balance={pos.source === 'native' || pos.source === 'spl' || pos.source === 'marinade'}>
 				<div class="pos-header">
 					<div>
 						<span class="pos-protocol">
 							{pos.protocol}
-							{#if pos.source === 'drift-devnet'}<span class="live-tag">LIVE</span>{/if}
+							{#if pos.source === 'sentinel-onchain'}<span class="live-tag">ON-CHAIN</span>{/if}
+							{#if pos.source === 'sentinel-paper'}<span class="live-tag paper">PAPER</span>{/if}
+							{#if pos.source === 'kamino' || pos.source === 'marginfi'}<span class="live-tag live">LIVE</span>{/if}
+							{#if pos.source === 'marinade'}<span class="live-tag stake">STAKED</span>{/if}
+							{#if pos.source === 'native' || pos.source === 'spl'}<span class="live-tag wallet">WALLET</span>{/if}
 						</span>
 						<span class="pos-asset">{pos.asset}{#if pos.direction && pos.direction !== 'FLAT'} · <span class="dir dir-{pos.direction.toLowerCase()}">{pos.direction}</span>{/if}</span>
 					</div>
 					<span class="badge {riskClass(pos.riskLevel)}">{pos.riskLevel}</span>
 				</div>
-				<div class="pos-health">
-					<div class="health-label">
-						<span>Health Factor</span>
-						<span style="color: {gaugeColor(pos.healthFactor)}">{pos.healthFactor.toFixed(2)}{#if pos.healthPercent !== undefined} · {pos.healthPercent.toFixed(0)}%{/if}</span>
+				{#if pos.healthFactor !== undefined && pos.source !== 'native' && pos.source !== 'spl' && pos.source !== 'marinade'}
+					<div class="pos-health">
+						<div class="health-label">
+							<span>Health Factor</span>
+							<span style="color: {gaugeColor(pos.healthFactor)}">{pos.healthFactor.toFixed(2)}{#if pos.healthPercent !== undefined} · {pos.healthPercent.toFixed(0)}%{/if}</span>
+						</div>
+						<div class="gauge-bar">
+							<div class="gauge-fill" style="width: {gaugeWidth(pos.healthFactor)}%; background: {gaugeColor(pos.healthFactor)}"></div>
+						</div>
 					</div>
-					<div class="gauge-bar">
-						<div class="gauge-fill" style="width: {gaugeWidth(pos.healthFactor)}%; background: {gaugeColor(pos.healthFactor)}"></div>
-					</div>
-				</div>
+				{/if}
 				<div class="pos-details">
-					<div class="detail-row">
-						<span class="detail-label">Collateral</span>
-						<span class="detail-value">${pos.collateral.toLocaleString()}</span>
-					</div>
+					{#if pos.balance !== undefined}
+						<div class="detail-row">
+							<span class="detail-label">Balance</span>
+							<span class="detail-value">{pos.balance.toLocaleString(undefined, { maximumFractionDigits: 6 })} {pos.asset}</span>
+						</div>
+					{/if}
+					{#if pos.solEquivalent !== undefined}
+						<div class="detail-row">
+							<span class="detail-label">≈ in SOL</span>
+							<span class="detail-value">{pos.solEquivalent.toFixed(4)} SOL</span>
+						</div>
+					{/if}
+					{#if pos.exchangeRate !== undefined}
+						<div class="detail-row">
+							<span class="detail-label">mSOL / SOL</span>
+							<span class="detail-value">{pos.exchangeRate.toFixed(4)}</span>
+						</div>
+					{/if}
+					{#if pos.collateral !== undefined && pos.balance === undefined}
+						<div class="detail-row">
+							<span class="detail-label">Collateral</span>
+							<span class="detail-value">${pos.collateral.toLocaleString()}</span>
+						</div>
+					{/if}
 					{#if pos.notional !== undefined}
 						<div class="detail-row">
 							<span class="detail-label">Notional</span>
 							<span class="detail-value">${pos.notional.toLocaleString()}</span>
 						</div>
-					{:else}
+					{:else if pos.debt !== undefined && pos.balance === undefined}
 						<div class="detail-row">
 							<span class="detail-label">Debt</span>
 							<span class="detail-value">${pos.debt.toLocaleString()}</span>
@@ -703,8 +739,27 @@
 		letter-spacing: 1px;
 	}
 
+	.live-tag.paper {
+		color: var(--warning);
+		background: rgba(255,170,0,0.12);
+	}
+
+	.live-tag.stake {
+		color: #52c4ff;
+		background: rgba(82,196,255,0.12);
+	}
+
+	.live-tag.wallet {
+		color: #7a9a7a;
+		background: rgba(122,154,122,0.15);
+	}
+
 	.pos-live {
 		border-color: rgba(160, 123, 255, 0.4);
+	}
+
+	.pos-balance {
+		border-color: rgba(82, 196, 255, 0.25);
 	}
 
 	.dir {

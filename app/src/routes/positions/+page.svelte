@@ -8,10 +8,12 @@
 		id: string;
 		protocol: string;
 		asset: string;
-		healthFactor: number;
+		healthFactor?: number;
 		liquidationPrice?: number;
-		collateral: number;
-		debt: number;
+		collateral?: number;
+		debt?: number;
+		balance?: number;
+		solEquivalent?: number;
 		riskLevel: RiskLevel;
 		autoProtect?: boolean;
 		lastChecked: string;
@@ -76,7 +78,10 @@
 
 	async function loadLive(wallet: string) {
 		try {
-			const paper = await fetch(`/api/paper/positions/${wallet}`).then((r) => (r.ok ? r.json() : []));
+			const [paper, chainRes] = await Promise.all([
+				fetch(`/api/paper/positions/${wallet}`).then((r) => (r.ok ? r.json() : [])),
+				fetch(`/api/positions/chain/${wallet}`).then((r) => (r.ok ? r.json() : { positions: [] })),
+			]);
 			let onchain: Position[] = [];
 			try {
 				const mod = await import('$lib/onchain/openLeveraged');
@@ -86,7 +91,8 @@
 			} catch {
 				onchain = [];
 			}
-			livePositions = [...onchain, ...(Array.isArray(paper) ? paper : [])];
+			const chain = Array.isArray(chainRes?.positions) ? chainRes.positions : [];
+			livePositions = [...onchain, ...(Array.isArray(paper) ? paper : []), ...chain];
 		} catch {
 			livePositions = [];
 		}
@@ -151,10 +157,10 @@
 			</thead>
 			<tbody>
 				{#each allPositions as pos}
-					<tr class:row-critical={pos.riskLevel === 'Critical'} class:row-live={pos.source === 'drift-devnet'}>
+					<tr class:row-critical={pos.riskLevel === 'Critical'} class:row-live={pos.source === 'sentinel-onchain' || pos.source === 'drift-devnet'}>
 						<td class="protocol-cell">
 							{pos.protocol}
-							{#if pos.source === 'drift-devnet'}<span class="live-mark">LIVE</span>{/if}
+							{#if pos.source === 'sentinel-onchain' || pos.source === 'kamino' || pos.source === 'marginfi'}<span class="live-mark">LIVE</span>{/if}
 						</td>
 						<td class="asset-cell">{pos.asset}</td>
 						<td>
@@ -165,19 +171,35 @@
 							{/if}
 						</td>
 						<td>
-							<span style="color: {healthColor(pos.healthFactor)}; font-weight: 600">
-								{pos.healthFactor.toFixed(2)}
-							</span>
+							{#if pos.healthFactor !== undefined}
+								<span style="color: {healthColor(pos.healthFactor)}; font-weight: 600">
+									{pos.healthFactor.toFixed(2)}
+								</span>
+							{:else}
+								<span class="dim">—</span>
+							{/if}
 						</td>
 						<td>{pos.leverage ? `${pos.leverage.toFixed(2)}x` : '—'}</td>
-						<td>${pos.collateral.toLocaleString()}</td>
+						<td>
+							{#if pos.collateral !== undefined}
+								${pos.collateral.toLocaleString()}
+							{:else if pos.balance !== undefined}
+								{pos.balance.toLocaleString(undefined, { maximumFractionDigits: 6 })} {pos.asset}
+							{:else}
+								<span class="dim">—</span>
+							{/if}
+						</td>
 						<td>
 							{#if pos.unrealizedPnl !== undefined}
 								<span style="color: {pos.unrealizedPnl >= 0 ? 'var(--safe)' : 'var(--critical)'}">
 									{pos.unrealizedPnl >= 0 ? '+' : ''}${pos.unrealizedPnl.toLocaleString()}
 								</span>
-							{:else}
+							{:else if pos.debt !== undefined}
 								${pos.debt.toLocaleString()}
+							{:else if pos.solEquivalent !== undefined}
+								≈ {pos.solEquivalent.toFixed(4)} SOL
+							{:else}
+								<span class="dim">—</span>
 							{/if}
 						</td>
 						<td><span class="badge {riskClass(pos.riskLevel)}">{pos.riskLevel}</span></td>

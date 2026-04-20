@@ -45,7 +45,16 @@ ALERT_COOLDOWN_SECONDS = 600  # Don't re-alert for same position within 10 min
 
 
 def load_keypair_bytes(path: str) -> bytes:
-    resolved = Path(path).expanduser()
-    with open(resolved, "r") as fh:
-        data = json.load(fh)
-    return bytes(data[:64])
+    """Read a Solana CLI keypair JSON (64-byte array) and return the raw secret bytes.
+
+    Raises:
+        FileNotFoundError — key file does not exist.
+        ValueError — malformed payload (not a >=64 length int array).
+    """
+    keyfile = Path(path).expanduser().resolve()
+    if not keyfile.is_file():
+        raise FileNotFoundError(f"keypair file not found: {keyfile}")
+    payload = json.loads(keyfile.read_text(encoding="utf-8"))
+    if not isinstance(payload, list) or len(payload) < 64:
+        raise ValueError(f"malformed keypair at {keyfile} (expected >=64-byte array)")
+    return bytes(payload[:64])

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Sentinel AI — DeFi Risk Monitor</title>
+		<meta name="description" content="Mil-spec risk monitor for Solana DeFi positions. Health factor tracking. ML-driven liquidation forecasts." />
+		<meta property="og:title" content="Sentinel AI — DeFi Risk Monitor" />
+		<meta property="og:description" content="Mil-spec risk monitor for Solana DeFi positions." />
+		<meta property="og:type" content="website" />
+		<meta property="og:image" content="/og.svg" />
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:image" content="/og.svg" />
+		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-prerender="true">
+		<script type="module">
+			import { Buffer } from 'buffer';
+			window.Buffer = Buffer;
+			window.global = window;
+			window.process = { env: {} };
+		</script>
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>

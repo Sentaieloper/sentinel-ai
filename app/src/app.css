@@ -1,0 +1,81 @@
+:root {
+	--bg-base: #0a0f0a;
+	--bg-panel: #111a11;
+	--bg-card: #162016;
+	--border: #1e2e1e;
+	--border-bright: #2a3e2a;
+	--text-primary: #c8dac8;
+	--text-secondary: #7a9a7a;
+	--text-dim: #4a6a4a;
+	--accent-green: #3ddc84;
+	--accent-red: #ff4444;
+	--accent-amber: #ffaa00;
+	--accent-blue: #4488ff;
+	--safe: #3ddc84;
+	--warning: #ffaa00;
+	--danger: #ff6622;
+	--critical: #ff4444;
+}
+
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+body {
+	font-family: 'IBM Plex Mono', monospace;
+	background-color: var(--bg-base);
+	color: var(--text-primary);
+	min-height: 100vh;
+}
+
+a {
+	color: var(--accent-green);
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+.container {
+	max-width: 1200px;
+	margin: 0 auto;
+	padding: 0 20px;
+}
+
+.panel {
+	background: var(--bg-panel);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 20px;
+}
+
+.badge {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 2px;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.badge-safe { background: rgba(61,220,132,0.15); color: var(--safe); }
+.badge-warning { background: rgba(255,170,0,0.15); color: var(--warning); }
+.badge-danger { background: rgba(255,102,34,0.15); color: var(--danger); }
+.badge-critical { background: rgba(255,68,68,0.15); color: var(--critical); border: 1px solid rgba(255,68,68,0.3); }
+
+.gauge-bar {
+	height: 6px;
+	border-radius: 3px;
+	background: var(--bg-base);
+	overflow: hidden;
+}
+
+.gauge-fill {
+	height: 100%;
+	border-radius: 3px;
+	transition: width 0.6s ease;
+}

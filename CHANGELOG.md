@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.6] — Documentation Pass
+
+### Added
+- ML Input Vector Documentation At docs/ML_INPUT_VECTOR.md With 7d Feature Schema
+- Risk Threshold Env Vars Block In monitor/.env.example Mirror On-Chain Constants
+
+### Notes
+- Feature Shape Locked At v3 — Adding A Feature Now Requires Bumping Model Name
+
 ## [0.4.5] — Phase 4.5: Aggregator + Hardening
 
 ### Added

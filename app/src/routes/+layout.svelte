@@ -2,6 +2,7 @@
 	import '../app.css';
 	import { page } from '$app/stores';
 	import { walletStore, connectPhantom, disconnectPhantom, abbreviateAddress } from '$lib/stores/wallet';
+	import RiskDisclaimer from '$lib/components/RiskDisclaimer.svelte';
 
 	const navItems = [
 		{ href: '/', label: 'Tactical' },
@@ -23,6 +24,7 @@
 </script>
 
 <div class="app-shell">
+	<RiskDisclaimer />
 	<header class="topbar">
 		<div class="container topbar-inner">
 			<div class="brand">

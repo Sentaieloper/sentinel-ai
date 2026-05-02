@@ -1,5 +1,8 @@
 # Sentinel AI
 
+**Production reference deployment:** [sentinel-fi.vercel.app](https://sentinel-fi.vercel.app) (Solana devnet)
+**On-chain alert registry (devnet):** `5QiE51bSE3yqJFmRhj1CHt2NwaJpC2iodsaLDrZJDheE`
+
 ## Overview
 
 Sentinel AI is an intelligent DeFi position monitoring system that detects liquidation risk before it happens. Using machine learning prediction models combined with real-time on-chain data analysis, Sentinel provides early warning alerts for DeFi positions across Solana lending protocols.

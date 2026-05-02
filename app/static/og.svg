@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <pattern id="hex" width="40" height="46" patternUnits="userSpaceOnUse">
+      <path d="M20 0 L40 11 L40 34 L20 46 L0 34 L0 11 Z" fill="none" stroke="#1a2734" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="630" fill="#0a1018"/>
+  <rect width="1200" height="630" fill="url(#hex)" opacity="0.6"/>
+  <g stroke="#22384d" stroke-width="1" fill="none">
+    <rect x="40" y="40" width="1120" height="550"/>
+    <rect x="50" y="50" width="1100" height="530" stroke="#0e1a26"/>
+  </g>
+  <g font-family="monospace" fill="#5a8aaf">
+    <text x="80" y="100" font-size="14" letter-spacing="4">// SENTINEL.AI · MIL-SPEC RISK MONITOR · CLASSIFIED</text>
+    <text x="80" y="125" font-size="12" letter-spacing="2" fill="#3a5a78">UNIT 5QiE · DEVNET · OPSEC GREEN</text>
+  </g>
+  <g font-family="monospace" font-weight="700">
+    <text x="80" y="280" font-size="98" fill="#e6efff" letter-spacing="-1">SENTINEL</text>
+    <text x="80" y="350" font-size="54" fill="#ff8a4a">AI</text>
+  </g>
+  <text x="80" y="410" font-family="monospace" font-size="26" fill="#a8c4dd">DeFi positions monitored. Liquidations forecast.</text>
+  <g transform="translate(80,470)" font-family="monospace" font-size="14" fill="#5a8aaf">
+    <rect x="0" y="0" width="180" height="56" fill="#0d1722" stroke="#22384d"/>
+    <text x="14" y="22" fill="#5a8aaf">HEALTH FACTOR</text>
+    <text x="14" y="46" fill="#4ade80" font-size="22" font-weight="700">2.34 SAFE</text>
+    <rect x="195" y="0" width="180" height="56" fill="#0d1722" stroke="#22384d"/>
+    <text x="209" y="22" fill="#5a8aaf">XGBOOST · 24H</text>
+    <text x="209" y="46" fill="#fbbf24" font-size="22" font-weight="700">P=0.12</text>
+    <rect x="390" y="0" width="180" height="56" fill="#0d1722" stroke="#22384d"/>
+    <text x="404" y="22" fill="#5a8aaf">PROTOCOLS</text>
+    <text x="404" y="46" fill="#e6efff" font-size="22" font-weight="700">6 LIVE</text>
+  </g>
+  <g transform="translate(870,180)" fill="none" stroke-width="14" stroke-linecap="round">
+    <circle cx="120" cy="120" r="100" stroke="#1a2734"/>
+    <path d="M 120 20 A 100 100 0 1 1 49 191" stroke="#4ade80"/>
+    <text x="120" y="115" font-family="monospace" font-size="44" font-weight="700" fill="#e6efff" text-anchor="middle" stroke="none">87</text>
+    <text x="120" y="148" font-family="monospace" font-size="14" fill="#5a8aaf" text-anchor="middle" stroke="none" letter-spacing="2">SAFETY %</text>
+  </g>
+  <text x="80" y="565" font-family="monospace" font-size="12" fill="#3a5a78" letter-spacing="3">TRACKING: DRIFT · KAMINO · MARINADE · SPL · MARGINFI · NATIVE</text>
+</svg>

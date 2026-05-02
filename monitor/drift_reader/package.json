@@ -1,0 +1,16 @@
+{
+  "name": "sentinel-drift-reader",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@drift-labs/sdk": "2.112.0-beta.5",
+    "@solana/web3.js": "1.95.4",
+    "express": "4.19.2",
+    "cors": "2.8.5"
+  }
+}

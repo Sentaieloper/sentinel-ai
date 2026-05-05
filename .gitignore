@@ -24,3 +24,7 @@ model/*.pkl
 model/*.joblib
 
 .DS_Store
+
+# vercel
+.vercel/
+

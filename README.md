@@ -44,4 +44,4 @@ The reference deployment described above is a devnet instance for evaluation pur
 
 ## License
 
-MIT
+Distributed under the MIT License. Refer to the [LICENSE](LICENSE) file at the repository root for full terms. The grant is provided strictly "as is" and without warranty of any kind; the limitations enumerated therein operate in concert with the Risk Disclaimer above and govern any operational, evaluative, or derivative use of this codebase.

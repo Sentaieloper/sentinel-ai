@@ -144,10 +144,15 @@
 		? `${$walletStore.address.slice(0, 4)}…${$walletStore.address.slice(-4)}`
 		: 'NO OPERATOR';
 
+	// Threat color stops — added intermediate "moderate" tier so the gauge
+	// doesn't jump straight from safe → warning, which read as alarmist on
+	// positions that were only mildly stressed (HF 1.6–1.9).
 	$: threatColor = threatLevel === 'HIGH'
 		? 'var(--critical)'
 		: threatLevel === 'ELEVATED'
 		? 'var(--warning)'
+		: threatLevel === 'MODERATE'
+		? 'var(--danger)'
 		: 'var(--safe)';
 </script>
 

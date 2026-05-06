@@ -11,7 +11,7 @@ Sentinel AI is an intelligent DeFi position monitoring system that detects liqui
 - **Risk Scoring**: Proprietary risk assessment combining multiple on-chain signals
 - **Alert System**: Configurable thresholds with notification delivery
 
-## Technology Stack
+## System Architecture
 
 - **Smart Contracts**: Anchor (Rust) - Alert subscriptions and on-chain config
 - **Frontend**: SvelteKit + Styled Components
@@ -19,7 +19,7 @@ Sentinel AI is an intelligent DeFi position monitoring system that detects liqui
 - **Font**: IBM Plex Mono
 - **Theme**: Dark military/tactical
 
-## Development
+## Local Build
 
 ```bash
 # Deploy contracts

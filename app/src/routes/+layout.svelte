@@ -2,17 +2,20 @@
 	import '../app.css';
 	import { page } from '$app/stores';
 	import { walletStore, connectPhantom, disconnectPhantom, abbreviateAddress } from '$lib/stores/wallet';
-	import RiskDisclaimer from '$lib/components/RiskDisclaimer.svelte';
 
 	const navItems = [
-		{ href: '/', label: 'Tactical' },
-		{ href: '/dashboard', label: 'Dashboard' },
+		{ href: '/', label: 'Dashboard' },
 		{ href: '/positions', label: 'Positions' },
 		{ href: '/alerts', label: 'Alerts' }
 	];
 
-	$: walletConnected = $walletStore.connected;
-	$: walletAddress = $walletStore.address;
+	let walletConnected = false;
+	let walletAddress: string | null = null;
+
+	walletStore.subscribe((state) => {
+		walletConnected = state.connected;
+		walletAddress = state.address;
+	});
 
 	async function handleWalletClick() {
 		if (walletConnected) {
@@ -24,7 +27,6 @@
 </script>
 
 <div class="app-shell">
-	<RiskDisclaimer />
 	<header class="topbar">
 		<div class="container topbar-inner">
 			<div class="brand">
@@ -77,30 +79,6 @@
 		position: sticky;
 		top: 0;
 		z-index: 50;
-		height: 60px;
-		overflow: hidden;
-	}
-
-	.topbar::after {
-		content: '';
-		position: absolute;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		height: 1px;
-		background: linear-gradient(
-			90deg,
-			transparent 0%,
-			var(--accent-green) 50%,
-			transparent 100%
-		);
-		animation: topbar-sweep 5s linear infinite;
-	}
-
-	@keyframes topbar-sweep {
-		0%   { transform: translateX(-100%); opacity: 0; }
-		40%  { opacity: 1; }
-		100% { transform: translateX(100%);  opacity: 0; }
 	}
 
 	.topbar-inner {

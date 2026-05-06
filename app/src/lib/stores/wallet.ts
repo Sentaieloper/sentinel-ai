@@ -45,5 +45,5 @@ export async function disconnectPhantom(): Promise<void> {
 
 export function abbreviateAddress(addr: string): string {
 	if (addr.length <= 10) return addr;
-	return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+	return `${addr.slice(0, 4)}...${addr.slice(-4)}`;
 }

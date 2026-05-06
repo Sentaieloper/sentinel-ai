@@ -26,24 +26,15 @@ pub fn handler(
     collateral_value: u64,
     debt_value: u64,
 ) -> Result<()> {
-    require!(health_factor <= MAX_HEALTH_FACTOR, SentinelError::OutOfBounds);
-    require!(collateral_value <= MAX_POSITION_USD_VALUE, SentinelError::OutOfBounds);
-    require!(debt_value <= MAX_POSITION_USD_VALUE, SentinelError::OutOfBounds);
-
     let clock = Clock::get()?;
     let pos = &mut ctx.accounts.position;
-
-    // Freshness check: last_checked must move forward.
-    require!(
-        clock.unix_timestamp >= pos.last_checked,
-        SentinelError::StaleUpdate
-    );
 
     pos.health_factor = health_factor;
     pos.collateral_value = collateral_value;
     pos.debt_value = debt_value;
     pos.last_checked = clock.unix_timestamp;
 
+    // SECURITY: Evaluate risk level based on health factor thresholds
     pos.risk_level = if health_factor >= WARNING_THRESHOLD {
         RiskLevel::Safe
     } else if health_factor >= DANGER_THRESHOLD {

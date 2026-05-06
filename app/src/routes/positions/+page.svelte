@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { walletStore } from '$lib/stores/wallet';
 
 	type RiskLevel = 'Safe' | 'Warning' | 'Danger' | 'Critical';
 
@@ -8,19 +7,13 @@
 		id: string;
 		protocol: string;
 		asset: string;
-		healthFactor?: number;
-		liquidationPrice?: number;
-		collateral?: number;
-		debt?: number;
-		balance?: number;
-		solEquivalent?: number;
+		healthFactor: number;
+		liquidationPrice: number;
+		collateral: number;
+		debt: number;
 		riskLevel: RiskLevel;
-		autoProtect?: boolean;
+		autoProtect: boolean;
 		lastChecked: string;
-		source?: string;
-		direction?: 'LONG' | 'SHORT' | 'FLAT';
-		leverage?: number;
-		unrealizedPnl?: number;
 	}
 
 	const fallbackPositions: Position[] = [
@@ -32,11 +25,9 @@
 	];
 
 	let positions: Position[] = fallbackPositions;
-	let livePositions: Position[] = [];
 	let dataSource: 'LIVE' | 'DEMO' = 'DEMO';
-	let currentWallet: string | null = null;
 
-	async function loadDemo() {
+	onMount(async () => {
 		try {
 			const res = await fetch('/api/positions');
 			if (res.ok) {
@@ -46,73 +37,7 @@
 		} catch {
 			// API unavailable — keep fallback data
 		}
-	}
-
-	async function evaluateOnChainRaw(raw: any): Promise<Position | null> {
-		try {
-			const solPrice = (await (await fetch('/api/pyth/SOL')).json()).price;
-			const collateralSol = Number(raw.collateralLamports) / 1_000_000_000;
-			const collateralUsd = collateralSol * solPrice;
-			const leverage = raw.leverageBps / 100;
-			const entryPrice = Number(raw.entryPriceMicro) / 1_000_000;
-
-			const res = await fetch('/api/sentinel/evaluate', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					id: raw.pda,
-					asset: raw.asset,
-					direction: raw.direction,
-					collateralUsd,
-					leverage,
-					entryPrice,
-					openedAt: raw.openedAt,
-					source: 'sentinel-onchain',
-				}),
-			});
-			return res.ok ? await res.json() : null;
-		} catch {
-			return null;
-		}
-	}
-
-	async function loadLive(wallet: string) {
-		try {
-			const [paper, chainRes] = await Promise.all([
-				fetch(`/api/paper/positions/${wallet}`).then((r) => (r.ok ? r.json() : [])),
-				fetch(`/api/positions/chain/${wallet}`).then((r) => (r.ok ? r.json() : { positions: [] })),
-			]);
-			let onchain: Position[] = [];
-			try {
-				const mod = await import('$lib/onchain/openLeveraged');
-				const raw = await mod.listOnChainPositions(wallet);
-				const evaluated = await Promise.all(raw.map(evaluateOnChainRaw));
-				onchain = evaluated.filter((p): p is Position => p !== null);
-			} catch {
-				onchain = [];
-			}
-			const chain = Array.isArray(chainRes?.positions) ? chainRes.positions : [];
-			livePositions = [...onchain, ...(Array.isArray(paper) ? paper : []), ...chain];
-		} catch {
-			livePositions = [];
-		}
-	}
-
-	onMount(loadDemo);
-
-	$: {
-		const state = $walletStore;
-		if (state.connected && state.address && state.address !== currentWallet) {
-			currentWallet = state.address;
-			loadLive(state.address);
-		}
-		if (!state.connected && currentWallet !== null) {
-			currentWallet = null;
-			livePositions = [];
-		}
-	}
-
-	$: allPositions = currentWallet ? livePositions : positions;
+	});
 
 	function riskClass(level: RiskLevel): string {
 		return `badge-${level.toLowerCase()}`;
@@ -130,12 +55,8 @@
 	<div class="page-header">
 		<h1>POSITION MONITOR</h1>
 		<div class="header-meta">
-			{#if livePositions.length > 0}
-				<span class="data-badge live">LIVE · DRIFT DEVNET</span>
-			{:else}
-				<span class="data-badge" class:live={dataSource === 'LIVE'}>{dataSource}</span>
-			{/if}
-			<span class="subtitle">{allPositions.length} positions tracked across {new Set(allPositions.map(p => p.protocol)).size} protocols</span>
+			<span class="data-badge" class:live={dataSource === 'LIVE'}>{dataSource}</span>
+			<span class="subtitle">{positions.length} positions tracked across {new Set(positions.map(p => p.protocol)).size} protocols</span>
 		</div>
 	</div>
 
@@ -145,65 +66,36 @@
 				<tr>
 					<th>Protocol</th>
 					<th>Asset</th>
-					<th>Dir</th>
-					<th>Health</th>
-					<th>Leverage</th>
+					<th>Health Factor</th>
+					<th>Liq. Price</th>
 					<th>Collateral</th>
-					<th>PnL / Debt</th>
+					<th>Debt</th>
 					<th>Status</th>
+					<th>Shield</th>
 					<th>Updated</th>
 				</tr>
 			</thead>
 			<tbody>
-				{#each allPositions as pos}
-					<tr class:row-critical={pos.riskLevel === 'Critical'} class:row-live={pos.source === 'sentinel-onchain' || pos.source === 'drift-devnet'}>
-						<td class="protocol-cell">
-							{pos.protocol}
-							{#if pos.source === 'sentinel-onchain' || pos.source === 'kamino' || pos.source === 'marginfi'}<span class="live-mark">LIVE</span>{/if}
-						</td>
+				{#each positions as pos}
+					<tr class:row-critical={pos.riskLevel === 'Critical'}>
+						<td class="protocol-cell">{pos.protocol}</td>
 						<td class="asset-cell">{pos.asset}</td>
 						<td>
-							{#if pos.direction && pos.direction !== 'FLAT'}
-								<span class="dir dir-{pos.direction.toLowerCase()}">{pos.direction}</span>
-							{:else}
-								<span class="dim">—</span>
-							{/if}
+							<span style="color: {healthColor(pos.healthFactor)}; font-weight: 600">
+								{pos.healthFactor.toFixed(2)}
+							</span>
 						</td>
-						<td>
-							{#if pos.healthFactor !== undefined}
-								<span
-										style="color: {healthColor(pos.healthFactor)}; font-weight: 600"
-										title="Liquidation threshold: HF below 1.0 triggers protocol-side liquidation. Sentinel raises a warning at HF ≤ 1.50 and a critical alert at HF ≤ 1.15. Threshold values are protocol-specific and may differ for isolated vs cross collateral.">
-									{pos.healthFactor.toFixed(2)}
-								</span>
-							{:else}
-								<span class="dim">—</span>
-							{/if}
-						</td>
-						<td>{pos.leverage ? `${pos.leverage.toFixed(2)}x` : '—'}</td>
-						<td>
-							{#if pos.collateral !== undefined}
-								${pos.collateral.toLocaleString()}
-							{:else if pos.balance !== undefined}
-								{pos.balance.toLocaleString(undefined, { maximumFractionDigits: 6 })} {pos.asset}
-							{:else}
-								<span class="dim">—</span>
-							{/if}
-						</td>
-						<td>
-							{#if pos.unrealizedPnl !== undefined}
-								<span style="color: {pos.unrealizedPnl >= 0 ? 'var(--safe)' : 'var(--critical)'}">
-									{pos.unrealizedPnl >= 0 ? '+' : ''}${pos.unrealizedPnl.toLocaleString()}
-								</span>
-							{:else if pos.debt !== undefined}
-								${pos.debt.toLocaleString()}
-							{:else if pos.solEquivalent !== undefined}
-								≈ {pos.solEquivalent.toFixed(4)} SOL
-							{:else}
-								<span class="dim">—</span>
-							{/if}
-						</td>
+						<td>${pos.liquidationPrice.toFixed(2)}</td>
+						<td>${pos.collateral.toLocaleString()}</td>
+						<td>${pos.debt.toLocaleString()}</td>
 						<td><span class="badge {riskClass(pos.riskLevel)}">{pos.riskLevel}</span></td>
+						<td class="shield-cell">
+							{#if pos.autoProtect}
+								<span class="shield-on">ON</span>
+							{:else}
+								<span class="shield-off">OFF</span>
+							{/if}
+						</td>
 						<td class="time-cell">{pos.lastChecked}</td>
 					</tr>
 				{/each}
@@ -318,32 +210,4 @@
 		color: var(--text-dim);
 		font-size: 10px;
 	}
-
-	.row-live {
-		background: rgba(160, 123, 255, 0.04);
-	}
-
-	.live-mark {
-		display: inline-block;
-		margin-left: 6px;
-		font-size: 8px;
-		font-weight: 700;
-		color: var(--accent-green);
-		background: rgba(61, 220, 132, 0.12);
-		padding: 1px 4px;
-		border-radius: 2px;
-		letter-spacing: 1px;
-	}
-
-	.dir {
-		font-size: 10px;
-		font-weight: 700;
-		letter-spacing: 1px;
-		padding: 2px 6px;
-		border-radius: 2px;
-	}
-
-	.dir-long { background: rgba(61, 220, 132, 0.15); color: var(--safe); }
-	.dir-short { background: rgba(255, 68, 68, 0.15); color: var(--critical); }
-	.dim { color: var(--text-dim); }
 </style>

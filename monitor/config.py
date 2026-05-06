@@ -45,33 +45,7 @@ ALERT_COOLDOWN_SECONDS = 600  # Don't re-alert for same position within 10 min
 
 
 def load_keypair_bytes(path: str) -> bytes:
-    """Resolve a Solana CLI keypair into raw secret bytes.
-
-    Order of resolution:
-      1. CRANK_KEYPAIR_JSON env (Railway-friendly inline JSON; tolerates
-         missing brackets when pasted via dashboards that strip them).
-      2. Filesystem path (developer machine, default ./crank-keypair.json).
-    """
-    inline = os.environ.get("CRANK_KEYPAIR_JSON", "").strip()
-    if inline:
-        try:
-            payload = json.loads(inline)
-        except json.JSONDecodeError:
-            inner = inline.lstrip("[(").rstrip(")]").strip()
-            try:
-                payload = [int(x) for x in inner.split(",") if x.strip()]
-            except ValueError as e:
-                raise ValueError(f"malformed CRANK_KEYPAIR_JSON: {e}") from e
-        if not isinstance(payload, list) or len(payload) < 64:
-            raise ValueError("CRANK_KEYPAIR_JSON expected >=64-byte int array")
-        return bytes(payload[:64])
-
-    keyfile = Path(path).expanduser().resolve()
-    if not keyfile.is_file():
-        raise FileNotFoundError(
-            f"keypair file not found: {keyfile} (and CRANK_KEYPAIR_JSON not set)"
-        )
-    payload = json.loads(keyfile.read_text(encoding="utf-8"))
-    if not isinstance(payload, list) or len(payload) < 64:
-        raise ValueError(f"malformed keypair at {keyfile} (expected >=64-byte array)")
-    return bytes(payload[:64])
+    resolved = Path(path).expanduser()
+    with open(resolved, "r") as fh:
+        data = json.load(fh)
+    return bytes(data[:64])

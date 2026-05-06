@@ -1,7 +1,6 @@
 use anchor_lang::prelude::*;
 use crate::state::SentinelConfig;
-use crate::constants::{CONFIG_SEED, ADMIN_AUTHORITY};
-use crate::errors::SentinelError;
+use crate::constants::CONFIG_SEED;
 
 #[derive(Accounts)]
 pub struct InitializeConfig<'info> {
@@ -13,10 +12,7 @@ pub struct InitializeConfig<'info> {
         bump,
     )]
     pub config: Account<'info, SentinelConfig>,
-    #[account(
-        mut,
-        address = ADMIN_AUTHORITY @ SentinelError::Unauthorized,
-    )]
+    #[account(mut)]
     pub authority: Signer<'info>,
     pub system_program: Program<'info, System>,
 }

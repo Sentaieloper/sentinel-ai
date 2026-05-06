@@ -1,15 +1,30 @@
+# build output
 node_modules/
 .svelte-kit/
 build/
+
+# secrets
 .env
 .env.*
 !.env.example
+deploy-keypair.json
+*.keypair.json
+/target/deploy/*-keypair.json
+
+# solana
 target/
 .anchor/
 test-ledger/
+
+# python + ML
 __pycache__/
 *.pyc
 .venv/
 model/*.pkl
 model/*.joblib
+
 .DS_Store
+
+# vercel
+.vercel/
+

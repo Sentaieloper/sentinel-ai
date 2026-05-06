@@ -171,7 +171,9 @@
 						</td>
 						<td>
 							{#if pos.healthFactor !== undefined}
-								<span style="color: {healthColor(pos.healthFactor)}; font-weight: 600">
+								<span
+										style="color: {healthColor(pos.healthFactor)}; font-weight: 600"
+										title="Liquidation threshold: HF below 1.0 triggers protocol-side liquidation. Sentinel raises a warning at HF ≤ 1.50 and a critical alert at HF ≤ 1.15. Threshold values are protocol-specific and may differ for isolated vs cross collateral.">
 									{pos.healthFactor.toFixed(2)}
 								</span>
 							{:else}

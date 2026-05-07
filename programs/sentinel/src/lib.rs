@@ -44,4 +44,31 @@ pub mod sentinel {
     ) -> Result<()> {
         instructions::create_alert::handler(ctx, alert_id, alert_type, predicted_liquidation_time)
     }
+
+    pub fn open_leveraged_position(
+        ctx: Context<OpenLeveragedPosition>,
+        nonce: u64,
+        asset: state::SupportedAsset,
+        direction: state::PositionDirection,
+        collateral_lamports: u64,
+        leverage_bps: u16,
+        entry_price_micro: u64,
+    ) -> Result<()> {
+        instructions::open_leveraged::handler(
+            ctx,
+            nonce,
+            asset,
+            direction,
+            collateral_lamports,
+            leverage_bps,
+            entry_price_micro,
+        )
+    }
+
+    pub fn close_leveraged_position(
+        ctx: Context<CloseLeveragedPosition>,
+        exit_price_micro: u64,
+    ) -> Result<()> {
+        instructions::close_leveraged::handler(ctx, exit_price_micro)
+    }
 }
